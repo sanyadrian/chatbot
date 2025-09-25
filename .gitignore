@@ -29,9 +29,6 @@ logs/*.log
 dist/
 coverage/
 
-# Database (don’t push raw DB files)
-database/
-
 # Config (only if it contains secrets – otherwise keep it)
 config/*.json
 config/*.yml
