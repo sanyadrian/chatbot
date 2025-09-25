@@ -45,6 +45,23 @@ app.use('/api/chats', chatRoutes);
 app.use('/api/websites', websiteRoutes);
 app.use('/api/agents', agentRoutes);
 
+// Root endpoint
+app.get('/', (req, res) => {
+  res.json({ 
+    message: 'Central Chat Dashboard API',
+    status: 'OK', 
+    timestamp: new Date().toISOString(),
+    version: '1.0.0',
+    endpoints: {
+      health: '/api/health',
+      auth: '/api/auth',
+      chats: '/api/chats',
+      websites: '/api/websites',
+      agents: '/api/agents'
+    }
+  });
+});
+
 // Health check endpoint
 app.get('/api/health', (req, res) => {
   res.json({ 
