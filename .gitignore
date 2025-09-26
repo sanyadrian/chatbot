@@ -35,3 +35,5 @@ config/*.yml
 
 # Temporary / test scripts
 test-api.sh
+test-local.sh
+test-local.bat

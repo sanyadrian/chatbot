@@ -3,7 +3,37 @@ const bcrypt = require('bcryptjs');
 const { query } = require('../config/database');
 const router = express.Router();
 
-// Get all agents
+// Get all agents (specific route before parameterized route)
+router.get('/list', async (req, res) => {
+  try {
+    const result = await query(
+      `SELECT 
+        id, 
+        name, 
+        email, 
+        status, 
+        max_concurrent_chats,
+        current_chats,
+        last_active,
+        created_at,
+        (SELECT COUNT(*) FROM chat_sessions WHERE agent_id = a.id) as total_sessions,
+        (SELECT COUNT(*) FROM chat_sessions WHERE agent_id = a.id AND status = 'active') as active_sessions
+      FROM agents a 
+      ORDER BY created_at DESC`
+    );
+
+    res.json({
+      success: true,
+      agents: result.rows
+    });
+
+  } catch (error) {
+    console.error('Get agents error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Get all agents (root route)
 router.get('/', async (req, res) => {
   try {
     const result = await query(

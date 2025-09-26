@@ -51,7 +51,34 @@ router.post('/register', async (req, res) => {
   }
 });
 
-// Get all websites
+// Get all websites (specific route before parameterized route)
+router.get('/list', async (req, res) => {
+  try {
+    const result = await query(
+      `SELECT 
+        id, 
+        name, 
+        domain, 
+        status, 
+        created_at,
+        (SELECT COUNT(*) FROM chat_sessions WHERE website_id = w.id) as total_sessions,
+        (SELECT COUNT(*) FROM chat_sessions WHERE website_id = w.id AND status = 'active') as active_sessions
+      FROM websites w 
+      ORDER BY created_at DESC`
+    );
+
+    res.json({
+      success: true,
+      websites: result.rows
+    });
+
+  } catch (error) {
+    console.error('Get websites error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Get all websites (root route)
 router.get('/', async (req, res) => {
   try {
     const result = await query(
