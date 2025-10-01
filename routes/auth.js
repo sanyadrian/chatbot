@@ -133,6 +133,47 @@ router.get('/verify', async (req, res) => {
   }
 });
 
+// Get current user profile (alias for /verify)
+router.get('/me', async (req, res) => {
+  try {
+    const token = req.headers.authorization?.replace('Bearer ', '');
+    
+    if (!token) {
+      return res.status(401).json({ error: 'No token provided' });
+    }
+
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    
+    // Get agent details
+    const result = await query(
+      'SELECT id, name, email, status, max_concurrent_chats, current_chats FROM agents WHERE id = $1',
+      [decoded.agentId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(401).json({ error: 'Agent not found' });
+    }
+
+    const agent = result.rows[0];
+
+    res.json({
+      success: true,
+      agent: {
+        id: agent.id,
+        name: agent.name,
+        email: agent.email,
+        status: agent.status,
+        maxConcurrentChats: agent.max_concurrent_chats,
+        currentChats: agent.current_chats
+      }
+    });
+
+  } catch (error) {
+    console.error('Token verification error:', error);
+    res.status(401).json({ error: 'Invalid token' });
+  }
+});
+
 // Register new agent (admin only)
 router.post('/register', async (req, res) => {
   try {

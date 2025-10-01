@@ -4,6 +4,7 @@ const socketIo = require('socket.io');
 const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
+const path = require('path');
 require('dotenv').config();
 
 const authRoutes = require('./routes/auth');
@@ -31,22 +32,39 @@ app.use(cors({
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
-// Rate limiting
-const limiter = rateLimit({
-  windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS) || 15 * 60 * 1000, // 15 minutes
-  max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS) || 100, // limit each IP to 100 requests per windowMs
-  message: 'Too many requests from this IP, please try again later.'
-});
-app.use('/api/', limiter);
+// Rate limiting - DISABLED for development
+// const limiter = rateLimit({
+//   windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS) || 15 * 60 * 1000, // 15 minutes
+//   max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS) || 1000, // limit each IP to 1000 requests per windowMs
+//   message: 'Too many requests from this IP, please try again later.'
+// });
 
-// Routes
+// Stricter rate limiting for auth endpoints - DISABLED for development
+// const authLimiter = rateLimit({
+//   windowMs: 15 * 60 * 1000, // 15 minutes
+//   max: 50, // limit each IP to 50 login attempts per windowMs
+//   message: 'Too many login attempts from this IP, please try again later.'
+// });
+
+// app.use('/api/', limiter);
+// app.use('/api/auth/login', authLimiter);
+
+// Routes (before static files to avoid conflicts)
 app.use('/api/auth', authRoutes);
 app.use('/api/chats', chatRoutes);
 app.use('/api/websites', websiteRoutes);
 app.use('/api/agents', agentRoutes);
 
-// Root endpoint
+// Serve static files (after API routes)
+app.use(express.static('public'));
+
+// Root endpoint - serve the dashboard
 app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
+// API info endpoint
+app.get('/api', (req, res) => {
   res.json({ 
     message: 'Central Chat Dashboard API',
     status: 'OK', 
@@ -125,6 +143,77 @@ io.on('connection', (socket) => {
       userId: data.userId,
       isTyping: false
     });
+  });
+
+  // Handle new chat session
+  socket.on('new-chat-session', (data) => {
+    const { sessionId, customerName, customerEmail, topic, websiteId } = data;
+    
+    // Notify all agents about new chat
+    io.emit('new-chat-available', {
+      sessionId,
+      customerName,
+      customerEmail,
+      topic,
+      websiteId,
+      timestamp: new Date().toISOString()
+    });
+    
+    console.log(`New chat session created: ${sessionId} for ${customerName}`);
+  });
+
+  // Handle agent status updates
+  socket.on('agent-status-update', (data) => {
+    const { agentId, status } = data;
+    
+    // Broadcast agent status to all connected clients
+    io.emit('agent-status-changed', {
+      agentId,
+      status,
+      timestamp: new Date().toISOString()
+    });
+    
+    console.log(`Agent ${agentId} status changed to: ${status}`);
+  });
+
+  // Handle chat session status updates
+  socket.on('chat-status-update', (data) => {
+    const { sessionId, status, agentId } = data;
+    
+    // Broadcast to all users in this chat session
+    io.to(`chat-${sessionId}`).emit('chat-status-changed', {
+      sessionId,
+      status,
+      agentId,
+      timestamp: new Date().toISOString()
+    });
+    
+    // Notify all agents about status change
+    io.emit('chat-status-updated', {
+      sessionId,
+      status,
+      agentId,
+      timestamp: new Date().toISOString()
+    });
+    
+    console.log(`Chat ${sessionId} status changed to: ${status}`);
+  });
+
+  // Handle agent assignment
+  socket.on('assign-agent', (data) => {
+    const { sessionId, agentId } = data;
+    
+    // Join the agent to this specific chat
+    socket.join(`chat-${sessionId}`);
+    
+    // Notify all users in this chat about agent assignment
+    io.to(`chat-${sessionId}`).emit('agent-assigned', {
+      sessionId,
+      agentId,
+      timestamp: new Date().toISOString()
+    });
+    
+    console.log(`Agent ${agentId} assigned to chat ${sessionId}`);
   });
 
   socket.on('disconnect', () => {

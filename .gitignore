@@ -37,3 +37,4 @@ config/*.yml
 test-api.sh
 test-local.sh
 test-local.bat
+deploy-frontend.sh

@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    <title>Central Chat Dashboard</title>
+    <link rel="stylesheet" href="/css/style.css?v=3">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <!-- Login Page -->
+    <div id="loginPage" class="login-container">
+        <div class="login-card">
+            <div class="login-header">
+                <div class="logo">
+                    <i class="fas fa-comments"></i>
+                    <h1>Central Chat</h1>
+                </div>
+                <p>Agent Dashboard</p>
+            </div>
+            
+            <form id="loginForm" class="login-form">
+                <div class="form-group">
+                    <label for="email">Email</label>
+                    <input type="email" id="email" name="email" required>
+                </div>
+                
+                <div class="form-group">
+                    <label for="password">Password</label>
+                    <input type="password" id="password" name="password" required>
+                </div>
+                
+                <button type="submit" class="login-btn">
+                    <span class="btn-text">Sign In</span>
+                    <span class="btn-loader" style="display: none;">
+                        <i class="fas fa-spinner fa-spin"></i>
+                    </span>
+                </button>
+            </form>
+            
+            <div id="loginError" class="error-message" style="display: none;"></div>
+        </div>
+    </div>
+
+    <!-- Main Dashboard -->
+    <div id="dashboard" class="dashboard" style="display: none;">
+        <!-- Sidebar -->
+        <div class="sidebar">
+            <div class="sidebar-header">
+                <div class="logo">
+                    <i class="fas fa-comments"></i>
+                    <h2>Central Chat</h2>
+                </div>
+                <button id="sidebarToggle" class="sidebar-toggle">
+                    <i class="fas fa-bars"></i>
+                </button>
+            </div>
+            
+            <nav class="sidebar-nav">
+                <a href="#" class="nav-item active" data-section="chats">
+                    <i class="fas fa-comments"></i>
+                    <span>Live Chats</span>
+                    <span class="badge" id="activeChatsCount">0</span>
+                </a>
+                <a href="#" class="nav-item" data-section="websites">
+                    <i class="fas fa-globe"></i>
+                    <span>Websites</span>
+                </a>
+                <a href="#" class="nav-item" data-section="agents">
+                    <i class="fas fa-users"></i>
+                    <span>Agents</span>
+                </a>
+                <a href="#" class="nav-item" data-section="settings">
+                    <i class="fas fa-cog"></i>
+                    <span>Settings</span>
+                </a>
+            </nav>
+            
+            <div class="sidebar-footer">
+                <div class="user-info">
+                    <div class="user-avatar">
+                        <i class="fas fa-user"></i>
+                    </div>
+                    <div class="user-details">
+                        <div class="user-name" id="userName">Agent Name</div>
+                        <div class="user-status online">
+                            <span class="status-dot"></span>
+                            Online
+                        </div>
+                    </div>
+                </div>
+                <button id="logoutBtn" class="logout-btn">
+                    <i class="fas fa-sign-out-alt"></i>
+                </button>
+            </div>
+        </div>
+
+        <!-- Main Content -->
+        <div class="main-content">
+            <!-- Header -->
+            <header class="header">
+                <div class="header-left">
+                    <h1 id="pageTitle">Live Chats</h1>
+                    <div class="breadcrumb" id="breadcrumb"></div>
+                </div>
+                <div class="header-right">
+                    <div class="notifications">
+                        <button class="notification-btn">
+                            <i class="fas fa-bell"></i>
+                            <span class="notification-badge" id="notificationCount">0</span>
+                        </button>
+                    </div>
+                    <div class="user-menu">
+                        <button class="user-menu-btn">
+                            <div class="user-avatar-small">
+                                <i class="fas fa-user"></i>
+                            </div>
+                            <span id="userNameSmall">Agent</span>
+                            <i class="fas fa-chevron-down"></i>
+                        </button>
+                    </div>
+                </div>
+            </header>
+
+            <!-- Content Area -->
+            <div class="content">
+                <!-- Chats Section -->
+                <div id="chatsSection" class="section active">
+                    <div class="chats-container">
+                        <div class="chats-sidebar">
+                            <div class="chats-header">
+                                <h3>Active Chats</h3>
+                                <div class="chats-filters">
+                                    <select id="statusFilter">
+                                        <option value="all">All Chats</option>
+                                        <option value="waiting">Waiting</option>
+                                        <option value="active">Active</option>
+                                        <option value="closed">Closed</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="chats-list" id="chatsList">
+                                <!-- Chat items will be populated here -->
+                            </div>
+                        </div>
+                        
+                        <div class="chat-main">
+                            <div class="chat-header" id="chatHeader" style="display: none;">
+                                <div class="chat-info">
+                                    <div class="chat-customer">
+                                        <div class="customer-avatar">
+                                            <i class="fas fa-user"></i>
+                                        </div>
+                                        <div class="customer-details">
+                                            <div class="customer-name" id="customerName">Customer Name</div>
+                                            <div class="customer-email" id="customerEmail">customer@example.com</div>
+                                        </div>
+                                    </div>
+                                    <div class="chat-meta">
+                                        <div class="chat-topic" id="chatTopic">Billing Support</div>
+                                        <div class="chat-status" id="chatStatus">Active</div>
+                                    </div>
+                                </div>
+                                <div class="chat-actions">
+                                    <button class="action-btn" id="assignChatBtn" title="Assign to Me" style="display: none;">
+                                        <i class="fas fa-user-plus"></i>
+                                    </button>
+                                    <button class="action-btn" id="closeChatBtn" title="Close Chat">
+                                        <i class="fas fa-times"></i>
+                                    </button>
+                                    <button class="action-btn" id="deleteChatBtn" title="Delete Chat">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            
+                            <div class="chat-messages" id="chatMessages">
+                                <div class="no-chat-selected">
+                                    <i class="fas fa-comments"></i>
+                                    <h3>Select a chat to start</h3>
+                                    <p>Choose a conversation from the sidebar to begin chatting</p>
+                                </div>
+                            </div>
+                            
+                            <div class="chat-input-container" id="chatInputContainer" style="display: none;">
+                                <div class="chat-input">
+                                    <input type="text" id="messageInput" placeholder="Type your message...">
+                                    <button id="sendMessageBtn" class="send-btn">
+                                        <i class="fas fa-paper-plane"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Websites Section -->
+                <div id="websitesSection" class="section">
+                    <div class="section-header">
+                        <h2>Websites</h2>
+                        <button class="btn btn-primary" id="addWebsiteBtn">
+                            <i class="fas fa-plus"></i>
+                            Add Website
+                        </button>
+                    </div>
+                    <div class="websites-grid" id="websitesGrid">
+                        <!-- Website cards will be populated here -->
+                    </div>
+                </div>
+
+                <!-- Agents Section -->
+                <div id="agentsSection" class="section">
+                    <div class="section-header">
+                        <h2>Agents</h2>
+                        <button class="btn btn-primary" id="addAgentBtn">
+                            <i class="fas fa-plus"></i>
+                            Add Agent
+                        </button>
+                    </div>
+                    <div class="agents-table-container">
+                        <table class="agents-table" id="agentsTable">
+                            <thead>
+                                <tr>
+                                    <th>Name</th>
+                                    <th>Email</th>
+                                    <th>Status</th>
+                                    <th>Active Chats</th>
+                                    <th>Last Active</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="agentsTableBody">
+                                <!-- Agent rows will be populated here -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Settings Section -->
+                <div id="settingsSection" class="section">
+                    <div class="section-header">
+                        <h2>Settings</h2>
+                    </div>
+                    <div class="settings-content">
+                        <div class="settings-card">
+                            <h3>Profile Settings</h3>
+                            <form id="profileForm">
+                                <div class="form-group">
+                                    <label for="profileName">Name</label>
+                                    <input type="text" id="profileName" name="name" required>
+                                </div>
+                                <div class="form-group">
+                                    <label for="profileEmail">Email</label>
+                                    <input type="email" id="profileEmail" name="email" required>
+                                </div>
+                                <button type="submit" class="btn btn-primary">Update Profile</button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Debug Script -->
+    <script>
+        console.log('HTML loaded at:', new Date().toISOString());
+        console.log('Current URL:', window.location.href);
+    </script>
+    
+    <!-- Scripts -->
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+    <script src="/js/app.js?v=7&t=1735312000"></script>
+    <script src="/js/auth.js?v=4&t=1735312000"></script>
+    <script src="/js/chat.js?v=6&t=1735312000"></script>
+    <script src="/js/websites.js?v=6&t=1735312000"></script>
+    <script src="/js/agents.js?v=5&t=1735312000"></script>
+</body>
+</html>
