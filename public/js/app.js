@@ -95,7 +95,7 @@ class ChatDashboard {
     }
 
     showLoginPage() {
-        document.getElementById('loginPage').style.display = 'block';
+        document.getElementById('loginPage').style.display = 'flex';
         document.getElementById('dashboard').style.display = 'none';
     }
 

@@ -46,13 +46,14 @@ async function sendAssignmentNotificationToWordPress(domain, sessionId, message)
         action: 'ohsi_receive_agent_message',
         session_id: sessionId,
         message: message,
-        sender_type: 'system',
-        nonce: 'wordpress_nonce'
+        sender_type: 'system'
       })
     });
 
     if (!response.ok) {
       console.error('WordPress notification response not ok:', response.status);
+      const errorText = await response.text();
+      console.error('WordPress error response:', errorText);
       return false;
     }
 
@@ -158,6 +159,11 @@ router.post('/start', async (req, res) => {
     console.error('Start chat error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
+});
+
+// Debug route to test routing
+router.get('/debug', (req, res) => {
+  res.json({ message: 'Chat routes are working', timestamp: new Date().toISOString() });
 });
 
 // Check assignment status for a specific session (WordPress plugin endpoint - no auth required)
@@ -735,6 +741,29 @@ router.delete('/delete', authenticateToken, async (req, res) => {
     }
 
     console.log('Session found, proceeding with deletion...');
+    
+    // Send closure notification BEFORE deleting the session
+    try {
+      // Get website info for this session
+      const websiteResult = await query(
+        'SELECT w.domain FROM chat_sessions cs JOIN websites w ON cs.website_id = w.id WHERE cs.session_id = $1',
+        [session_id]
+      );
+      
+      console.log('Website query result for session', session_id, ':', websiteResult.rows);
+      
+      if (websiteResult.rows.length > 0) {
+        const website = websiteResult.rows[0];
+        console.log('Sending chat closure notification to website:', website.domain);
+        const result = await sendAssignmentNotificationToWordPress(website.domain, session_id, 'Chat session closed by agent');
+        console.log('Chat closure notification result:', result);
+      } else {
+        console.log('No website found for session:', session_id);
+      }
+    } catch (error) {
+      console.error('Failed to send chat closure notification to WordPress:', error);
+    }
+    
     await transaction(async (client) => {
       // Delete messages first
       console.log('Deleting messages...');
