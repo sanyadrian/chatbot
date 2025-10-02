@@ -18,9 +18,17 @@ const server = http.createServer(app);
 // Socket.io setup
 const io = socketIo(server, {
   cors: {
-    origin: process.env.ALLOWED_ORIGINS?.split(',') || "*",
-    methods: ["GET", "POST"]
-  }
+    origin: process.env.ALLOWED_ORIGINS?.split(',') || [
+      "https://central-chat-dashboard.com",
+      "https://mymvde1wie-staging.onrocket.site",
+      "http://localhost:3000",
+      "http://127.0.0.1:3000"
+    ],
+    methods: ["GET", "POST"],
+    credentials: true
+  },
+  allowEIO3: true,
+  transports: ['polling', 'websocket']
 });
 
 // Middleware
@@ -49,11 +57,23 @@ app.use(express.urlencoded({ extended: true }));
 // app.use('/api/', limiter);
 // app.use('/api/auth/login', authLimiter);
 
+// Make io instance available to routes
+app.set('io', io);
+
 // Routes (before static files to avoid conflicts)
 app.use('/api/auth', authRoutes);
 app.use('/api/chats', chatRoutes);
 app.use('/api/websites', websiteRoutes);
 app.use('/api/agents', agentRoutes);
+
+// Socket.io test endpoint (before static files)
+app.get('/socket.io-test', (req, res) => {
+  res.json({
+    message: 'Socket.io server is running',
+    connectedClients: io.engine.clientsCount,
+    timestamp: new Date().toISOString()
+  });
+});
 
 // Serve static files (after API routes)
 app.use(express.static('public'));
@@ -70,6 +90,11 @@ app.get('/api', (req, res) => {
     status: 'OK', 
     timestamp: new Date().toISOString(),
     version: '1.0.0',
+    socketio: {
+      enabled: true,
+      transports: ['polling', 'websocket'],
+      cors: io.engine.cors
+    },
     endpoints: {
       health: '/api/health',
       auth: '/api/auth',
@@ -79,6 +104,7 @@ app.get('/api', (req, res) => {
     }
   });
 });
+
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {
@@ -91,7 +117,17 @@ app.get('/api/health', (req, res) => {
 
 // Socket.io connection handling
 io.on('connection', (socket) => {
-  console.log('User connected:', socket.id);
+  console.log('✅ User connected:', socket.id);
+  console.log('🔗 Socket transport:', socket.conn.transport.name);
+  console.log('🌐 Socket origin:', socket.handshake.headers.origin);
+  console.log('🔗 Socket handshake:', {
+    address: socket.handshake.address,
+    xdomain: socket.handshake.xdomain,
+    secure: socket.handshake.secure,
+    issued: socket.handshake.issued,
+    url: socket.handshake.url,
+    query: socket.handshake.query
+  });
 
   // Join agent to their room
   socket.on('agent-join', (agentId) => {
@@ -216,9 +252,22 @@ io.on('connection', (socket) => {
     console.log(`Agent ${agentId} assigned to chat ${sessionId}`);
   });
 
-  socket.on('disconnect', () => {
-    console.log('User disconnected:', socket.id);
+  socket.on('disconnect', (reason) => {
+    console.log('❌ User disconnected:', socket.id, 'Reason:', reason);
   });
+
+  socket.on('error', (error) => {
+    console.error('❌ Socket error:', error);
+  });
+});
+
+// Handle Socket.io errors
+io.on('error', (error) => {
+  console.error('❌ Socket.io server error:', error);
+});
+
+io.engine.on('connection_error', (err) => {
+  console.error('❌ Socket.io connection error:', err.req, err.code, err.message, err.context);
 });
 
 // Error handling middleware

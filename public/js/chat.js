@@ -615,6 +615,16 @@ class ChatManager {
         // Handle new customer messages (with notification)
         this.socket.on('new-customer-message', (data) => {
             this.showNotification(`New message in chat ${data.sessionId}`, 'info');
+            
+            // Show browser notification
+            if (window.notificationService) {
+                window.notificationService.showNewMessageNotification({
+                    customerName: 'Customer',
+                    message: data.message || 'New message received',
+                    sessionId: data.sessionId
+                });
+            }
+            
             // Refresh chats list
             if (window.app) {
                 window.app.loadChats();
@@ -624,6 +634,12 @@ class ChatManager {
         // Handle new chat sessions
         this.socket.on('new-chat-available', (data) => {
             this.showNotification(`New chat from ${data.customerName} (${data.topic})`, 'success');
+            
+            // Show browser notification
+            if (window.notificationService) {
+                window.notificationService.showNewChatNotification(data);
+            }
+            
             // Refresh chats list
             if (window.app) {
                 window.app.loadChats();

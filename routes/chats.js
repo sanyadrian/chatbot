@@ -140,6 +140,27 @@ router.post('/start', async (req, res) => {
       [session_id, 'system', `New chat session started. Topic: ${topic || 'General inquiry'}`]
     );
 
+    // Emit WebSocket event to notify agents about new chat
+    if (req.app && req.app.get('io')) {
+      const io = req.app.get('io');
+      const eventData = {
+        sessionId: session_id,
+        customerName: customer_name || 'Unknown Customer',
+        customerEmail: customer_email || 'No email',
+        topic: topic || 'General inquiry',
+        websiteId: website_id,
+        websiteName: website.name,
+        websiteDomain: website.domain,
+        timestamp: new Date().toISOString()
+      };
+      
+      console.log('🔔 EMITTING new-chat-available event:', eventData);
+      io.emit('new-chat-available', eventData);
+      console.log('✅ Successfully emitted new-chat-available event for session:', session_id);
+    } else {
+      console.error('❌ WebSocket not available - cannot emit new-chat-available event');
+    }
+
     res.status(201).json({
       success: true,
       session: {
@@ -164,6 +185,47 @@ router.post('/start', async (req, res) => {
 // Debug route to test routing
 router.get('/debug', (req, res) => {
   res.json({ message: 'Chat routes are working', timestamp: new Date().toISOString() });
+});
+
+// Test route to trigger WebSocket events
+router.post('/test-notifications', (req, res) => {
+  try {
+    if (req.app && req.app.get('io')) {
+      const io = req.app.get('io');
+      
+      // Test new chat notification
+      io.emit('new-chat-available', {
+        sessionId: 'test-' + Date.now(),
+        customerName: 'Test Customer',
+        customerEmail: 'test@example.com',
+        topic: 'Test Notification',
+        websiteId: 1,
+        websiteName: 'Test Website',
+        websiteDomain: 'test.com',
+        timestamp: new Date().toISOString()
+      });
+
+      // Test new message notification after 1 second
+      setTimeout(() => {
+        io.emit('new-customer-message', {
+          sessionId: 'test-' + Date.now(),
+          message: 'This is a test message from a customer',
+          timestamp: new Date().toISOString()
+        });
+      }, 1000);
+
+      res.json({ 
+        success: true, 
+        message: 'Test notifications sent',
+        timestamp: new Date().toISOString()
+      });
+    } else {
+      res.status(500).json({ error: 'WebSocket not available' });
+    }
+  } catch (error) {
+    console.error('Test notification error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
 });
 
 // Check assignment status for a specific session (WordPress plugin endpoint - no auth required)
@@ -507,6 +569,16 @@ router.post('/message', async (req, res) => {
         session_id: session_id,
         message: messageData
       });
+
+      // Emit customer message notification for agents
+      if (sender_type === 'user' || sender_type === 'customer') {
+        req.app.get('io').emit('new-customer-message', {
+          sessionId: session_id,
+          message: message,
+          timestamp: messageData.created_at
+        });
+        console.log('Emitted new-customer-message event for session:', session_id);
+      }
     }
 
     // Send message to WordPress plugin if it's from an agent

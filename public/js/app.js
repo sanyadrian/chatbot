@@ -28,6 +28,27 @@ class ChatDashboard {
             });
         });
 
+        // Test notification button
+        const testNotificationBtn = document.getElementById('testNotificationBtn');
+        if (testNotificationBtn) {
+            testNotificationBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                // Initialize audio context on first user interaction
+                if (window.notificationService) {
+                    window.notificationService.initializeAudioContext();
+                }
+                this.testNotifications();
+            });
+        }
+
+        // Test server notifications button (right-click for server test)
+        if (testNotificationBtn) {
+            testNotificationBtn.addEventListener('contextmenu', (e) => {
+                e.preventDefault();
+                this.testServerNotifications();
+            });
+        }
+
         // Sidebar toggle for mobile
         const sidebarToggle = document.getElementById('sidebarToggle');
         if (sidebarToggle) {
@@ -596,11 +617,56 @@ class ChatDashboard {
         }
     }
 
-    initializeSocket() {
-        this.socket = io();
+    async initializeSocket() {
+        console.log('🔌 Initializing Socket.io connection...');
+        console.log('🌐 Current URL:', window.location.origin);
+        
+        // First, test if Socket.io endpoint is accessible
+        try {
+            const testResponse = await fetch(`${this.apiBase}/socket.io-test`);
+            if (testResponse.ok) {
+                const testData = await testResponse.json();
+                console.log('✅ Socket.io server test successful:', testData);
+            } else {
+                console.error('❌ Socket.io server test failed:', testResponse.status);
+            }
+        } catch (error) {
+            console.error('❌ Socket.io server test error:', error);
+        }
+        
+        this.socket = io({
+            transports: ['polling', 'websocket'],
+            timeout: 20000,
+            forceNew: true,
+            upgrade: true,
+            rememberUpgrade: false
+        });
         
         this.socket.on('connect', () => {
-            console.log('Connected to server');
+            console.log('✅ Connected to server with socket ID:', this.socket.id);
+            console.log('🔗 Socket transport:', this.socket.io.engine.transport.name);
+        });
+
+        this.socket.on('disconnect', (reason) => {
+            console.log('❌ Disconnected from server. Reason:', reason);
+        });
+
+        this.socket.on('connect_error', (error) => {
+            console.error('❌ Socket connection error:', error);
+            console.error('❌ Error details:', {
+                message: error.message,
+                description: error.description,
+                context: error.context,
+                type: error.type
+            });
+        });
+
+        this.socket.on('reconnect', (attemptNumber) => {
+            console.log('🔄 Reconnected after', attemptNumber, 'attempts');
+        });
+
+        this.socket.on('reconnect_error', (error) => {
+            console.error('🔄 Reconnection error:', error);
         });
 
         this.socket.on('new_message', (data) => {
@@ -790,7 +856,16 @@ class ChatDashboard {
 
         // Handle new chat notifications
         this.socket.on('new-chat-available', (data) => {
-            console.log('New chat available:', data);
+            console.log('🔔 NEW CHAT AVAILABLE EVENT RECEIVED:', data);
+            
+            // Show browser notification
+            if (window.notificationService) {
+                console.log('📱 Showing browser notification...');
+                window.notificationService.showNewChatNotification(data);
+            } else {
+                console.error('❌ Notification service not available');
+            }
+            
             // Update notification count
             this.updateNotificationCount();
         });
@@ -808,6 +883,85 @@ class ChatDashboard {
         if (notificationBadge) {
             const currentCount = parseInt(notificationBadge.textContent) || 0;
             notificationBadge.textContent = currentCount + 1;
+        }
+    }
+
+    /**
+     * Test notification system
+     */
+    testNotifications() {
+        console.log('Testing notification system...');
+        
+        if (!window.notificationService) {
+            console.error('Notification service not available');
+            return;
+        }
+
+        // Initialize audio context first
+        window.notificationService.initializeAudioContext();
+
+        const status = window.notificationService.getStatus();
+        console.log('Notification status:', status);
+
+        if (!status.supported) {
+            alert('This browser does not support notifications');
+            return;
+        }
+
+        if (status.permission !== 'granted') {
+            alert('Notification permission not granted. Please allow notifications and try again.');
+            return;
+        }
+
+        // Test new chat notification
+        console.log('Testing new chat notification...');
+        window.notificationService.showNewChatNotification({
+            customerName: 'Test Customer',
+            customerEmail: 'test@example.com',
+            topic: 'Test Chat',
+            sessionId: 'test-' + Date.now()
+        });
+
+        // Test new message notification after 2 seconds
+        setTimeout(() => {
+            console.log('Testing new message notification...');
+            window.notificationService.showNewMessageNotification({
+                customerName: 'Test Customer',
+                message: 'This is a test message to verify notifications are working correctly!',
+                sessionId: 'test-' + Date.now()
+            });
+        }, 2000);
+
+        console.log('Notification tests completed!');
+    }
+
+    /**
+     * Test server-side WebSocket notifications
+     */
+    async testServerNotifications() {
+        console.log('Testing server-side WebSocket notifications...');
+        
+        try {
+            const response = await fetch(`${this.apiBase}/api/chats/test-notifications`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${localStorage.getItem('token')}`
+                }
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                console.log('Server test response:', data);
+                alert('Server notifications sent! Check for WebSocket events in console.');
+            } else {
+                const error = await response.json();
+                console.error('Server test failed:', error);
+                alert('Server test failed: ' + (error.error || 'Unknown error'));
+            }
+        } catch (error) {
+            console.error('Error testing server notifications:', error);
+            alert('Error testing server notifications: ' + error.message);
         }
     }
 }
