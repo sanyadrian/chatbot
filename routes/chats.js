@@ -2,6 +2,7 @@ const express = require('express');
 const jwt = require('jsonwebtoken');
 const { query, transaction } = require('../config/database');
 const nodemailer = require('nodemailer');
+const { SESv2Client, SendEmailCommand } = require('@aws-sdk/client-sesv2');
 const router = express.Router();
 
 // Check if any agents are available
@@ -72,6 +73,9 @@ router.post('/offline-message', async (req, res) => {
 });
 
 // Function to send offline message email
+
+
+// Function to send offline message email using AWS SDK directly
 async function sendOfflineMessageEmail(agentEmail, agentName, messageData) {
   const { customer_name, customer_email, topic, message } = messageData;
   
@@ -88,32 +92,43 @@ async function sendOfflineMessageEmail(agentEmail, agentName, messageData) {
   `;
   
   try {
-    // Create transporter using AWS SES v3
-    const { SESClient } = require('@aws-sdk/client-ses');
-    const ses = new SESClient({
+    // Create SES v2 client
+    const sesClient = new SESv2Client({
       region: process.env.AWS_REGION || 'us-east-1',
       credentials: {
         accessKeyId: process.env.AWS_ACCESS_KEY_ID,
         secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY
       }
     });
-    
-    const transporter = nodemailer.createTransport({
-      SES: { ses, aws: { SESClient } }
-    });
-    
-    // Email options
-    const mailOptions = {
-      from: process.env.SES_FROM_EMAIL || 'noreply@yourdomain.com',
-      to: agentEmail,
-      subject: subject,
-      html: emailBody,
-      replyTo: customer_email // So agents can reply directly to customer
+
+    // Prepare email parameters for SESv2
+    const emailParams = {
+      FromEmailAddress: process.env.SES_FROM_EMAIL || 'noreply@central-chat-dashboard.com',
+      Destination: {
+        ToAddresses: [agentEmail]
+      },
+      Content: {
+        Simple: {
+          Subject: {
+            Data: subject,
+            Charset: 'UTF-8'
+          },
+          Body: {
+            Html: {
+              Data: emailBody,
+              Charset: 'UTF-8'
+            }
+          }
+        }
+      },
+      ReplyToAddresses: [customer_email]
     };
     
-    // Send email
-    const info = await transporter.sendMail(mailOptions);
-    console.log(`📧 Email sent successfully to ${agentName} (${agentEmail}):`, info.messageId);
+    // Send email using AWS SDK directly
+    const command = new SendEmailCommand(emailParams);
+    const result = await sesClient.send(command);
+    
+    console.log(`📧 Email sent successfully to ${agentName} (${agentEmail}):`, result.MessageId);
     return true;
     
   } catch (error) {
@@ -123,7 +138,7 @@ async function sendOfflineMessageEmail(agentEmail, agentName, messageData) {
       accessKeyId: process.env.AWS_ACCESS_KEY_ID ? 'SET' : 'NOT SET',
       secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY ? 'SET' : 'NOT SET',
       region: process.env.AWS_REGION || 'us-east-1',
-      fromEmail: process.env.SES_FROM_EMAIL || 'noreply@yourdomain.com'
+      fromEmail: process.env.SES_FROM_EMAIL || 'noreply@central-chat-dashboard.com'
     });
     
     // Fallback: Log the email details for manual sending
