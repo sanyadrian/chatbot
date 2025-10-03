@@ -948,12 +948,20 @@ router.delete('/delete', authenticateToken, async (req, res) => {
 
     // Check if session exists first
     console.log('Checking if session exists...');
+    console.log('Looking for session_id:', session_id);
+    console.log('Session_id type:', typeof session_id);
+    console.log('Session_id length:', session_id ? session_id.length : 'null');
+    
     const sessionCheck = await query(
       'SELECT id, session_id FROM chat_sessions WHERE session_id = $1',
       [session_id]
     );
     
     console.log('Session check result:', sessionCheck.rows);
+    
+    // Also check all sessions to see what's in the database
+    const allSessions = await query('SELECT id, session_id FROM chat_sessions ORDER BY id DESC LIMIT 5');
+    console.log('Recent sessions in database:', allSessions.rows);
 
     if (sessionCheck.rows.length === 0) {
       console.log('ERROR: Session not found in database');
@@ -975,7 +983,12 @@ router.delete('/delete', authenticateToken, async (req, res) => {
       if (websiteResult.rows.length > 0) {
         const website = websiteResult.rows[0];
         console.log('Sending chat closure notification to website:', website.domain);
-        const result = await sendAssignmentNotificationToWordPress(website.domain, session_id, 'Chat session closed by agent');
+        
+        // Use the correct WordPress domain instead of the stored domain
+        const wordpressDomain = 'mymvde1wie-staging.onrocket.site';
+        console.log('Using WordPress domain:', wordpressDomain);
+        
+        const result = await sendAssignmentNotificationToWordPress(wordpressDomain, session_id, 'Chat session closed by agent');
         console.log('Chat closure notification result:', result);
       } else {
         console.log('No website found for session:', session_id);
