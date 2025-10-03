@@ -1,7 +1,140 @@
 const express = require('express');
 const jwt = require('jsonwebtoken');
 const { query, transaction } = require('../config/database');
+const nodemailer = require('nodemailer');
 const router = express.Router();
+
+// Check if any agents are available
+router.get('/agents/availability', async (req, res) => {
+  try {
+    // First, let's just check if any agents exist and are online
+    const result = await query(`
+      SELECT COUNT(*) as available_count
+      FROM agents 
+      WHERE status = 'online'
+    `);
+    
+    const availableCount = parseInt(result.rows[0].available_count);
+    
+    res.json({
+      agents_available: availableCount > 0,
+      available_count: availableCount
+    });
+  } catch (error) {
+    console.error('Error checking agent availability:', error);
+    console.error('Error details:', error);
+    res.status(500).json({ error: 'Failed to check agent availability' });
+  }
+});
+
+// Send offline message to all agents
+router.post('/offline-message', async (req, res) => {
+  try {
+    const { customer_name, customer_email, topic, message } = req.body;
+    
+    if (!customer_name || !customer_email || !message) {
+      return res.status(400).json({ error: 'Missing required fields' });
+    }
+    
+    // Get all agents' emails
+    const agentsResult = await query(`
+      SELECT email, name 
+      FROM agents 
+      WHERE status = 'online' OR status = 'offline'
+    `);
+    
+    if (agentsResult.rows.length === 0) {
+      return res.status(404).json({ error: 'No agents found' });
+    }
+    
+    // Send email to all agents
+    const emailPromises = agentsResult.rows.map(agent => {
+      return sendOfflineMessageEmail(agent.email, agent.name, {
+        customer_name,
+        customer_email,
+        topic,
+        message
+      });
+    });
+    
+    await Promise.all(emailPromises);
+    
+    res.json({ 
+      success: true, 
+      message: 'Offline message sent to all agents',
+      agents_notified: agentsResult.rows.length
+    });
+    
+  } catch (error) {
+    console.error('Error sending offline message:', error);
+    res.status(500).json({ error: 'Failed to send offline message' });
+  }
+});
+
+// Function to send offline message email
+async function sendOfflineMessageEmail(agentEmail, agentName, messageData) {
+  const { customer_name, customer_email, topic, message } = messageData;
+  
+  const subject = `New Offline Message - ${topic}`;
+  const emailBody = `
+    <h2>New Offline Message Received</h2>
+    <p><strong>Customer:</strong> ${customer_name} (${customer_email})</p>
+    <p><strong>Topic:</strong> ${topic}</p>
+    <p><strong>Message:</strong></p>
+    <p>${message}</p>
+    <hr>
+    <p><em>This message was sent because no agents were available for live chat.</em></p>
+    <p><em>Please respond directly to the customer at: ${customer_email}</em></p>
+  `;
+  
+  try {
+    // Create transporter using AWS SES v3
+    const { SESClient } = require('@aws-sdk/client-ses');
+    const ses = new SESClient({
+      region: process.env.AWS_REGION || 'us-east-1',
+      credentials: {
+        accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+        secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY
+      }
+    });
+    
+    const transporter = nodemailer.createTransport({
+      SES: { ses, aws: { SESClient } }
+    });
+    
+    // Email options
+    const mailOptions = {
+      from: process.env.SES_FROM_EMAIL || 'noreply@yourdomain.com',
+      to: agentEmail,
+      subject: subject,
+      html: emailBody,
+      replyTo: customer_email // So agents can reply directly to customer
+    };
+    
+    // Send email
+    const info = await transporter.sendMail(mailOptions);
+    console.log(`📧 Email sent successfully to ${agentName} (${agentEmail}):`, info.messageId);
+    return true;
+    
+  } catch (error) {
+    console.error(`❌ Failed to send email to ${agentName} (${agentEmail}):`, error);
+    console.error(`❌ Error details:`, error.message);
+    console.error(`❌ AWS Config:`, {
+      accessKeyId: process.env.AWS_ACCESS_KEY_ID ? 'SET' : 'NOT SET',
+      secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY ? 'SET' : 'NOT SET',
+      region: process.env.AWS_REGION || 'us-east-1',
+      fromEmail: process.env.SES_FROM_EMAIL || 'noreply@yourdomain.com'
+    });
+    
+    // Fallback: Log the email details for manual sending
+    console.log(`📧 MANUAL EMAIL REQUIRED FOR ${agentName} (${agentEmail}):`);
+    console.log(`Subject: ${subject}`);
+    console.log(`Body: ${emailBody}`);
+    console.log(`Customer Email: ${customer_email}`);
+    
+    return false;
+  }
+}
 
 // Function to send message to WordPress plugin
 async function sendMessageToWordPress(domain, sessionId, message, senderType) {
