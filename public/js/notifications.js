@@ -401,6 +401,53 @@ class NotificationService {
     }
 
     /**
+     * Show offline message notification
+     */
+    showOfflineMessageNotification(data) {
+        console.log('📧 Showing offline message notification:', data);
+        
+        // Play notification sound
+        this.playNotificationSound();
+        
+        // Show browser notification
+        if (this.permission === 'granted') {
+            const notification = new Notification('New Offline Message', {
+                body: `${data.customer_name}: ${data.message}`,
+                icon: '/favicon.ico',
+                tag: `offline-message-${data.id}`,
+                requireInteraction: true,
+                data: {
+                    type: 'offline-message',
+                    messageId: data.id,
+                    customerName: data.customer_name,
+                    customerEmail: data.customer_email,
+                    topic: data.topic,
+                    priority: data.priority
+                }
+            });
+            
+            // Handle notification click
+            notification.onclick = () => {
+                window.focus();
+                // Switch to messages section
+                if (window.app && window.app.showSection) {
+                    window.app.showSection('messages');
+                }
+                notification.close();
+            };
+            
+            // Auto-close after 10 seconds
+            setTimeout(() => {
+                notification.close();
+            }, 10000);
+        }
+        
+        // Update notification count
+        this.notificationCount++;
+        this.updateNotificationBadge();
+    }
+
+    /**
      * Get current notification status
      */
     getStatus() {

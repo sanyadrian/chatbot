@@ -70,6 +70,11 @@
                     <i class="fas fa-globe"></i>
                     <span>Websites</span>
                 </a>
+                <a href="#" class="nav-item" data-section="messages">
+                    <i class="fas fa-envelope"></i>
+                    <span>Messages</span>
+                    <span class="badge" id="unreadMessagesCount">0</span>
+                </a>
                 <a href="#" class="nav-item" data-section="agents">
                     <i class="fas fa-users"></i>
                     <span>Agents</span>
@@ -209,6 +214,54 @@
                     </div>
                     <div class="websites-grid" id="websitesGrid">
                         <!-- Website cards will be populated here -->
+                    </div>
+                </div>
+
+                <!-- Messages Section -->
+                <div id="messagesSection" class="section">
+                    <div class="section-header">
+                        <h2>Offline Messages</h2>
+                        <div class="messages-filters">
+                            <select id="messageStatusFilter">
+                                <option value="all">All Messages</option>
+                                <option value="new">New</option>
+                                <option value="replied">Replied</option>
+                                <option value="closed">Closed</option>
+                            </select>
+                            <select id="messagePriorityFilter">
+                                <option value="all">All Priorities</option>
+                                <option value="urgent">Urgent</option>
+                                <option value="high">High</option>
+                                <option value="medium">Medium</option>
+                                <option value="low">Low</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="messages-container">
+                        <div class="messages-list" id="messagesList">
+                            <!-- Messages will be populated here -->
+                        </div>
+                        <div class="message-detail" id="messageDetail" style="display: none;">
+                            <div class="message-detail-header">
+                                <button class="btn btn-secondary" id="backToListBtn">
+                                    <i class="fas fa-arrow-left"></i>
+                                    Back to List
+                                </button>
+                                <div class="message-actions">
+                                    <button class="btn btn-primary" id="replyMessageBtn">
+                                        <i class="fas fa-reply"></i>
+                                        Reply
+                                    </button>
+                                    <button class="btn btn-warning" id="closeMessageBtn">
+                                        <i class="fas fa-times"></i>
+                                        Close
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="message-content" id="messageContent">
+                                <!-- Message detail will be populated here -->
+                            </div>
+                        </div>
                     </div>
                 </div>
 

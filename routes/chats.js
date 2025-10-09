@@ -1051,4 +1051,313 @@ router.post('/close', authenticateToken, async (req, res) => {
   }
 });
 
+// ==================== OFFLINE MESSAGES API ====================
+
+// Get all offline messages with filters
+router.get('/offline-messages', async (req, res) => {
+  try {
+    const { status = 'all', priority = 'all', page = 1, limit = 20 } = req.query;
+    const offset = (page - 1) * limit;
+
+    let whereClause = 'WHERE 1=1';
+    const params = [];
+    let paramCount = 0;
+
+    if (status !== 'all') {
+      paramCount++;
+      whereClause += ` AND om.status = $${paramCount}`;
+      params.push(status);
+    }
+
+    if (priority !== 'all') {
+      paramCount++;
+      whereClause += ` AND om.priority = $${paramCount}`;
+      params.push(priority);
+    }
+
+    const messagesQuery = `
+      SELECT 
+        om.id,
+        om.customer_name,
+        om.customer_email,
+        om.customer_phone,
+        om.message,
+        om.status,
+        om.priority,
+        om.topic,
+        om.created_at,
+        om.replied_at,
+        om.assigned_agent_id,
+        a.name as agent_name,
+        w.name as website_name,
+        w.domain as website_domain,
+        (SELECT COUNT(*) FROM offline_message_replies omr WHERE omr.offline_message_id = om.id) as reply_count
+      FROM offline_messages om
+      LEFT JOIN agents a ON om.assigned_agent_id = a.id
+      LEFT JOIN websites w ON om.website_id = w.id
+      ${whereClause}
+      ORDER BY om.created_at DESC
+      LIMIT $${paramCount + 1} OFFSET $${paramCount + 2}
+    `;
+
+    params.push(parseInt(limit), parseInt(offset));
+
+    const result = await query(messagesQuery, params);
+    
+    // Get total count for pagination
+    const countQuery = `
+      SELECT COUNT(*) as total
+      FROM offline_messages om
+      ${whereClause}
+    `;
+    const countResult = await query(countQuery, params.slice(0, -2));
+
+    res.json({
+      success: true,
+      data: {
+        messages: result.rows,
+        pagination: {
+          page: parseInt(page),
+          limit: parseInt(limit),
+          total: parseInt(countResult.rows[0].total),
+          pages: Math.ceil(countResult.rows[0].total / limit)
+        }
+      }
+    });
+
+  } catch (error) {
+    console.error('Get offline messages error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Get specific offline message with replies
+router.get('/offline-messages/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Get message details
+    const messageQuery = `
+      SELECT 
+        om.*,
+        a.name as agent_name,
+        w.name as website_name,
+        w.domain as website_domain
+      FROM offline_messages om
+      LEFT JOIN agents a ON om.assigned_agent_id = a.id
+      LEFT JOIN websites w ON om.website_id = w.id
+      WHERE om.id = $1
+    `;
+
+    const messageResult = await query(messageQuery, [id]);
+
+    if (messageResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Message not found' });
+    }
+
+    // Get replies
+    const repliesQuery = `
+      SELECT 
+        omr.*,
+        a.name as agent_name
+      FROM offline_message_replies omr
+      LEFT JOIN agents a ON omr.agent_id = a.id
+      WHERE omr.offline_message_id = $1
+      ORDER BY omr.created_at ASC
+    `;
+
+    const repliesResult = await query(repliesQuery, [id]);
+
+    res.json({
+      success: true,
+      data: {
+        message: messageResult.rows[0],
+        replies: repliesResult.rows
+      }
+    });
+
+  } catch (error) {
+    console.error('Get offline message error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Create offline message (called from WordPress)
+router.post('/offline-messages', async (req, res) => {
+  try {
+    const { 
+      website_id, 
+      customer_name, 
+      customer_email, 
+      customer_phone, 
+      message, 
+      topic = 'General Inquiry',
+      priority = 'medium' 
+    } = req.body;
+
+    // Validate required fields
+    if (!website_id || !customer_name || !customer_email || !message) {
+      return res.status(400).json({ 
+        error: 'Missing required fields: website_id, customer_name, customer_email, message' 
+      });
+    }
+
+    const insertQuery = `
+      INSERT INTO offline_messages 
+      (website_id, customer_name, customer_email, customer_phone, message, topic, priority)
+      VALUES ($1, $2, $3, $4, $5, $6, $7)
+      RETURNING id, created_at
+    `;
+
+    const result = await query(insertQuery, [
+      website_id, 
+      customer_name, 
+      customer_email, 
+      customer_phone || null, 
+      message, 
+      topic, 
+      priority
+    ]);
+
+    const newMessage = result.rows[0];
+
+    // Emit real-time notification to agents
+    const io = req.app.get('io');
+    if (io) {
+      io.emit('new-offline-message', {
+        id: newMessage.id,
+        customer_name,
+        customer_email,
+        message: message.substring(0, 100) + (message.length > 100 ? '...' : ''),
+        topic,
+        priority,
+        created_at: newMessage.created_at
+      });
+    }
+
+    res.json({
+      success: true,
+      data: newMessage
+    });
+
+  } catch (error) {
+    console.error('Create offline message error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Reply to offline message
+router.post('/offline-messages/:id/reply', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { reply_message, reply_type = 'text', is_internal = false } = req.body;
+    const agent_id = req.user.agentId;
+
+    if (!reply_message) {
+      return res.status(400).json({ error: 'Reply message is required' });
+    }
+
+    // Check if message exists
+    const messageCheck = await query('SELECT id, status FROM offline_messages WHERE id = $1', [id]);
+    if (messageCheck.rows.length === 0) {
+      return res.status(404).json({ error: 'Message not found' });
+    }
+
+    // Insert reply
+    const replyQuery = `
+      INSERT INTO offline_message_replies 
+      (offline_message_id, agent_id, reply_message, reply_type, is_internal)
+      VALUES ($1, $2, $3, $4, $5)
+      RETURNING id, created_at
+    `;
+
+    const replyResult = await query(replyQuery, [
+      id, 
+      agent_id, 
+      reply_message, 
+      reply_type, 
+      is_internal
+    ]);
+
+    // Update message status to 'replied' if it was 'new'
+    if (messageCheck.rows[0].status === 'new') {
+      await query(
+        'UPDATE offline_messages SET status = $1, replied_at = NOW(), assigned_agent_id = $2 WHERE id = $3',
+        ['replied', agent_id, id]
+      );
+    }
+
+    // If it's not an internal note, send email to customer
+    if (!is_internal) {
+      // TODO: Implement email sending to customer
+      console.log(`Would send email to customer with reply: ${reply_message}`);
+    }
+
+    res.json({
+      success: true,
+      data: replyResult.rows[0]
+    });
+
+  } catch (error) {
+    console.error('Reply to offline message error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Update message status
+router.put('/offline-messages/:id/status', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status, assigned_agent_id } = req.body;
+
+    if (!['new', 'replied', 'closed'].includes(status)) {
+      return res.status(400).json({ error: 'Invalid status' });
+    }
+
+    const updateQuery = `
+      UPDATE offline_messages 
+      SET status = $1, assigned_agent_id = $2
+      ${status === 'replied' ? ', replied_at = NOW()' : ''}
+      WHERE id = $3
+      RETURNING *
+    `;
+
+    const result = await query(updateQuery, [status, assigned_agent_id || null, id]);
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Message not found' });
+    }
+
+    res.json({
+      success: true,
+      data: result.rows[0]
+    });
+
+  } catch (error) {
+    console.error('Update message status error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Get unread messages count
+router.get('/offline-messages/unread/count', async (req, res) => {
+  try {
+    const result = await query(
+      'SELECT COUNT(*) as count FROM offline_messages WHERE status = $1',
+      ['new']
+    );
+
+    res.json({
+      success: true,
+      data: {
+        count: parseInt(result.rows[0].count)
+      }
+    });
+
+  } catch (error) {
+    console.error('Get unread count error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 module.exports = router;

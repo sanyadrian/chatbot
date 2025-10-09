@@ -152,6 +152,7 @@ class ChatDashboard {
         const titles = {
             'chats': 'Live Chats',
             'websites': 'Websites',
+            'messages': 'Offline Messages',
             'agents': 'Agents',
             'settings': 'Settings'
         };
@@ -173,6 +174,11 @@ class ChatDashboard {
             case 'websites':
                 if (window.websitesManager) {
                     await window.websitesManager.loadWebsites();
+                }
+                break;
+            case 'messages':
+                if (window.app && window.app.initMessagesSection) {
+                    window.app.initMessagesSection();
                 }
                 break;
             case 'agents':
@@ -876,6 +882,32 @@ class ChatDashboard {
             // Refresh chats list
             this.loadChats();
         });
+
+        // Handle new offline message notifications
+        this.socket.on('new-offline-message', (data) => {
+            console.log('🔔 NEW OFFLINE MESSAGE EVENT RECEIVED:', data);
+            
+            // Show browser notification
+            if (window.notificationService) {
+                console.log('📱 Showing offline message notification...');
+                window.notificationService.showOfflineMessageNotification(data);
+            } else {
+                console.error('❌ Notification service not available');
+            }
+            
+            // Update unread count
+            if (window.app && window.app.updateUnreadCount) {
+                window.app.updateUnreadCount();
+            }
+            
+            // Refresh messages list if we're on the messages section
+            const messagesSection = document.getElementById('messagesSection');
+            if (messagesSection && messagesSection.classList.contains('active')) {
+                if (window.app && window.app.loadMessages) {
+                    window.app.loadMessages();
+                }
+            }
+        });
     }
 
     updateNotificationCount() {
@@ -986,4 +1018,212 @@ document.addEventListener('DOMContentLoaded', () => {
     } else {
         console.error('Socket.io not loaded');
     }
+
+    // ==================== MESSAGES SECTION ====================
+    
+    // Initialize messages section
+    function initMessagesSection() {
+        console.log('Initializing Messages section...');
+        loadMessages();
+        updateUnreadCount();
+        
+        // Set up event listeners
+        document.getElementById('messageStatusFilter').addEventListener('change', loadMessages);
+        document.getElementById('messagePriorityFilter').addEventListener('change', loadMessages);
+        document.getElementById('backToListBtn').addEventListener('click', showMessagesList);
+        document.getElementById('replyMessageBtn').addEventListener('click', showReplyForm);
+        document.getElementById('closeMessageBtn').addEventListener('click', closeMessage);
+    }
+
+    // Load messages from API
+    async function loadMessages() {
+        try {
+            const status = document.getElementById('messageStatusFilter').value;
+            const priority = document.getElementById('messagePriorityFilter').value;
+            
+            const response = await fetch(`/api/chats/offline-messages?status=${status}&priority=${priority}`);
+            const data = await response.json();
+            
+            if (data.success) {
+                displayMessages(data.data.messages);
+                updateUnreadCount();
+            } else {
+                console.error('Failed to load messages:', data.error);
+            }
+        } catch (error) {
+            console.error('Error loading messages:', error);
+        }
+    }
+
+    // Display messages in the list
+    function displayMessages(messages) {
+        const messagesList = document.getElementById('messagesList');
+        
+        if (messages.length === 0) {
+            messagesList.innerHTML = `
+                <div class="no-messages">
+                    <i class="fas fa-envelope-open"></i>
+                    <h3>No offline messages</h3>
+                    <p>When customers send messages while agents are offline, they'll appear here.</p>
+                </div>
+            `;
+            return;
+        }
+
+        messagesList.innerHTML = messages.map(message => `
+            <div class="message-item ${message.status}" data-message-id="${message.id}">
+                <div class="message-header">
+                    <div class="message-customer">
+                        <h4>${message.customer_name}</h4>
+                        <span class="message-email">${message.customer_email}</span>
+                    </div>
+                    <div class="message-meta">
+                        <span class="message-status status-${message.status}">${message.status}</span>
+                        <span class="message-priority priority-${message.priority}">${message.priority}</span>
+                        <span class="message-time">${formatTime(message.created_at)}</span>
+                    </div>
+                </div>
+                <div class="message-preview">
+                    <p>${message.message.substring(0, 100)}${message.message.length > 100 ? '...' : ''}</p>
+                </div>
+                <div class="message-footer">
+                    <span class="message-topic">${message.topic}</span>
+                    <span class="message-website">${message.website_name}</span>
+                    ${message.reply_count > 0 ? `<span class="reply-count">${message.reply_count} replies</span>` : ''}
+                </div>
+            </div>
+        `).join('');
+
+        // Add click listeners to message items
+        document.querySelectorAll('.message-item').forEach(item => {
+            item.addEventListener('click', () => {
+                const messageId = item.dataset.messageId;
+                showMessageDetail(messageId);
+            });
+        });
+    }
+
+    // Show message detail
+    async function showMessageDetail(messageId) {
+        try {
+            const response = await fetch(`/api/chats/offline-messages/${messageId}`);
+            const data = await response.json();
+            
+            if (data.success) {
+                displayMessageDetail(data.data);
+                document.getElementById('messagesList').style.display = 'none';
+                document.getElementById('messageDetail').style.display = 'block';
+            } else {
+                console.error('Failed to load message detail:', data.error);
+            }
+        } catch (error) {
+            console.error('Error loading message detail:', error);
+        }
+    }
+
+    // Display message detail
+    function displayMessageDetail(data) {
+        const { message, replies } = data;
+        const messageContent = document.getElementById('messageContent');
+        
+        messageContent.innerHTML = `
+            <div class="message-detail-content">
+                <div class="message-info">
+                    <div class="customer-info">
+                        <h3>${message.customer_name}</h3>
+                        <p class="customer-email">${message.customer_email}</p>
+                        ${message.customer_phone ? `<p class="customer-phone">${message.customer_phone}</p>` : ''}
+                    </div>
+                    <div class="message-meta">
+                        <span class="status-badge status-${message.status}">${message.status}</span>
+                        <span class="priority-badge priority-${message.priority}">${message.priority}</span>
+                        <span class="topic-badge">${message.topic}</span>
+                        <span class="website-badge">${message.website_name}</span>
+                    </div>
+                </div>
+                
+                <div class="original-message">
+                    <h4>Original Message</h4>
+                    <div class="message-text">${message.message}</div>
+                    <div class="message-time">Received: ${formatDateTime(message.created_at)}</div>
+                </div>
+                
+                <div class="replies-section">
+                    <h4>Replies (${replies.length})</h4>
+                    <div class="replies-list">
+                        ${replies.length === 0 ? 
+                            '<p class="no-replies">No replies yet</p>' :
+                            replies.map(reply => `
+                                <div class="reply-item ${reply.is_internal ? 'internal' : ''}">
+                                    <div class="reply-header">
+                                        <span class="reply-agent">${reply.agent_name}</span>
+                                        <span class="reply-time">${formatDateTime(reply.created_at)}</span>
+                                        ${reply.is_internal ? '<span class="internal-note">Internal Note</span>' : ''}
+                                    </div>
+                                    <div class="reply-content">${reply.reply_message}</div>
+                                </div>
+                            `).join('')
+                        }
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    // Show messages list
+    function showMessagesList() {
+        document.getElementById('messagesList').style.display = 'block';
+        document.getElementById('messageDetail').style.display = 'none';
+    }
+
+    // Show reply form
+    function showReplyForm() {
+        // TODO: Implement reply form modal
+        console.log('Show reply form');
+    }
+
+    // Close message
+    async function closeMessage() {
+        // TODO: Implement close message functionality
+        console.log('Close message');
+    }
+
+    // Update unread count
+    async function updateUnreadCount() {
+        try {
+            const response = await fetch('/api/chats/offline-messages/unread/count');
+            const data = await response.json();
+            
+            if (data.success) {
+                const badge = document.getElementById('unreadMessagesCount');
+                badge.textContent = data.data.count;
+                badge.style.display = data.data.count > 0 ? 'block' : 'none';
+            }
+        } catch (error) {
+            console.error('Error updating unread count:', error);
+        }
+    }
+
+    // Format time for display
+    function formatTime(timestamp) {
+        const date = new Date(timestamp);
+        const now = new Date();
+        const diff = now - date;
+        
+        if (diff < 60000) return 'Just now';
+        if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`;
+        if (diff < 86400000) return `${Math.floor(diff / 3600000)}h ago`;
+        return date.toLocaleDateString();
+    }
+
+    // Format date and time for display
+    function formatDateTime(timestamp) {
+        const date = new Date(timestamp);
+        return date.toLocaleString();
+    }
+
+    // Add messages section to the app object
+    window.app.initMessagesSection = initMessagesSection;
+    window.app.loadMessages = loadMessages;
+    window.app.updateUnreadCount = updateUnreadCount;
 });
