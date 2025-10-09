@@ -185,7 +185,16 @@ async function sendMessageToWordPress(domain, sessionId, message, senderType) {
 // Function to send assignment notification to WordPress plugin
 async function sendAssignmentNotificationToWordPress(domain, sessionId, message) {
   try {
-    const response = await fetch(`https://${domain}/wp-admin/admin-ajax.php`, {
+    // Clean the domain - remove trailing slash and ensure it has protocol
+    let cleanDomain = domain.trim();
+    if (cleanDomain.endsWith('/')) {
+      cleanDomain = cleanDomain.slice(0, -1);
+    }
+    if (!cleanDomain.startsWith('http://') && !cleanDomain.startsWith('https://')) {
+      cleanDomain = `https://${cleanDomain}`;
+    }
+    
+    const response = await fetch(`${cleanDomain}/wp-admin/admin-ajax.php`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
@@ -984,11 +993,7 @@ router.delete('/delete', authenticateToken, async (req, res) => {
         const website = websiteResult.rows[0];
         console.log('Sending chat closure notification to website:', website.domain);
         
-        // Use the correct WordPress domain instead of the stored domain
-        const wordpressDomain = 'mymvde1wie-staging.onrocket.site';
-        console.log('Using WordPress domain:', wordpressDomain);
-        
-        const result = await sendAssignmentNotificationToWordPress(wordpressDomain, session_id, 'Chat session closed by agent');
+        const result = await sendAssignmentNotificationToWordPress(website.domain, session_id, 'Chat session closed by agent');
         console.log('Chat closure notification result:', result);
       } else {
         console.log('No website found for session:', session_id);
