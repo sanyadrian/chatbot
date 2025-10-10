@@ -1034,6 +1034,15 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('replyMessageBtn').addEventListener('click', showReplyForm);
         document.getElementById('closeMessageBtn').addEventListener('click', closeMessage);
         
+        // Add delete button event listener with null check
+        const deleteBtn = document.getElementById('deleteMessageBtn');
+        if (deleteBtn) {
+            deleteBtn.addEventListener('click', deleteMessage);
+            console.log('✅ Delete button event listener attached');
+        } else {
+            console.error('❌ Delete button not found');
+        }
+        
         // Modal event listeners
         document.getElementById('closeReplyModal').addEventListener('click', hideReplyModal);
         document.getElementById('cancelReply').addEventListener('click', hideReplyModal);
@@ -1233,6 +1242,41 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (confirm('Are you sure you want to close this message?')) {
             await updateMessageStatus(messageId, 'closed');
+        }
+    }
+
+    // Delete message
+    async function deleteMessage() {
+        console.log('🗑️ Delete message function called');
+        const messageId = getCurrentMessageId();
+        console.log('Message ID:', messageId);
+        if (!messageId) {
+            console.error('No message selected to delete');
+            return;
+        }
+
+        if (confirm('Are you sure you want to delete this message? This action cannot be undone.')) {
+            try {
+                const response = await fetch(`/api/chats/offline-messages/${messageId}`, {
+                    method: 'DELETE',
+                    headers: {
+                        'Authorization': `Bearer ${localStorage.getItem('token')}`
+                    }
+                });
+
+                if (response.ok) {
+                    alert('Message deleted successfully');
+                    showMessagesList(); // Go back to messages list
+                    loadMessages(); // Refresh the list
+                    updateUnreadCount(); // Update unread count
+                } else {
+                    const error = await response.json();
+                    alert(`Failed to delete message: ${error.error || 'Unknown error'}`);
+                }
+            } catch (error) {
+                console.error('Error deleting message:', error);
+                alert('Failed to delete message. Please try again.');
+            }
         }
     }
 

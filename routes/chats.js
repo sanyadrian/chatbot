@@ -1444,4 +1444,32 @@ router.get('/offline-messages/unread/count', authenticateToken, async (req, res)
   }
 });
 
+// Delete offline message
+router.delete('/offline-messages/:id', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    // Check if message exists
+    const messageCheck = await query('SELECT id FROM offline_messages WHERE id = $1', [id]);
+    if (messageCheck.rows.length === 0) {
+      return res.status(404).json({ error: 'Message not found' });
+    }
+
+    // Delete all replies first (due to foreign key constraint)
+    await query('DELETE FROM offline_message_replies WHERE offline_message_id = $1', [id]);
+    
+    // Delete the message
+    const result = await query('DELETE FROM offline_messages WHERE id = $1', [id]);
+    
+    if (result.rowCount > 0) {
+      res.json({ success: true, message: 'Message deleted successfully' });
+    } else {
+      res.status(404).json({ error: 'Message not found' });
+    }
+  } catch (error) {
+    console.error('Delete message error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 module.exports = router;
