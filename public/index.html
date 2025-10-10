@@ -319,6 +319,39 @@
         </div>
     </div>
 
+    <!-- Reply Modal -->
+    <div id="replyModal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Reply to Customer</h3>
+                <button class="modal-close" id="closeReplyModal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="reply-form">
+                    <div class="customer-info">
+                        <h4 id="replyCustomerName">Customer Name</h4>
+                        <p id="replyCustomerEmail">customer@example.com</p>
+                    </div>
+                    <div class="form-group">
+                        <label for="replyMessage">Your Reply:</label>
+                        <textarea id="replyMessage" placeholder="Type your reply here..." rows="8"></textarea>
+                    </div>
+                    <div class="form-options">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="isInternalReply">
+                            <span class="checkmark"></span>
+                            Internal Note (not sent to customer)
+                        </label>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" id="cancelReply">Cancel</button>
+                <button class="btn btn-primary" id="sendReply">Send Reply</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Debug Script -->
     <script>
         console.log('HTML loaded at:', new Date().toISOString());

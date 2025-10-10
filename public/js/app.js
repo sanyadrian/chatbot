@@ -1033,6 +1033,18 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('backToListBtn').addEventListener('click', showMessagesList);
         document.getElementById('replyMessageBtn').addEventListener('click', showReplyForm);
         document.getElementById('closeMessageBtn').addEventListener('click', closeMessage);
+        
+        // Modal event listeners
+        document.getElementById('closeReplyModal').addEventListener('click', hideReplyModal);
+        document.getElementById('cancelReply').addEventListener('click', hideReplyModal);
+        document.getElementById('sendReply').addEventListener('click', handleSendReply);
+        
+        // Close modal when clicking outside
+        document.getElementById('replyModal').addEventListener('click', (e) => {
+            if (e.target.id === 'replyModal') {
+                hideReplyModal();
+            }
+        });
     }
 
     // Load messages from API
@@ -1041,7 +1053,11 @@ document.addEventListener('DOMContentLoaded', () => {
             const status = document.getElementById('messageStatusFilter').value;
             const priority = document.getElementById('messagePriorityFilter').value;
             
-            const response = await fetch(`/api/chats/offline-messages?status=${status}&priority=${priority}`);
+            const response = await fetch(`/api/chats/offline-messages?status=${status}&priority=${priority}`, {
+                headers: {
+                    'Authorization': `Bearer ${localStorage.getItem('token')}`
+                }
+            });
             const data = await response.json();
             
             if (data.success) {
@@ -1106,7 +1122,11 @@ document.addEventListener('DOMContentLoaded', () => {
     // Show message detail
     async function showMessageDetail(messageId) {
         try {
-            const response = await fetch(`/api/chats/offline-messages/${messageId}`);
+            const response = await fetch(`/api/chats/offline-messages/${messageId}`, {
+                headers: {
+                    'Authorization': `Bearer ${localStorage.getItem('token')}`
+                }
+            });
             const data = await response.json();
             
             if (data.success) {
@@ -1125,6 +1145,9 @@ document.addEventListener('DOMContentLoaded', () => {
     function displayMessageDetail(data) {
         const { message, replies } = data;
         const messageContent = document.getElementById('messageContent');
+        
+        // Store message ID for reply/close functions
+        messageContent.dataset.messageId = message.id;
         
         messageContent.innerHTML = `
             <div class="message-detail-content">
@@ -1178,20 +1201,184 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Show reply form
     function showReplyForm() {
-        // TODO: Implement reply form modal
-        console.log('Show reply form');
+        const messageId = getCurrentMessageId();
+        if (!messageId) {
+            console.error('No message selected for reply');
+            return;
+        }
+
+        // Get current message data to populate the modal
+        const messageContent = document.getElementById('messageContent');
+        const customerName = messageContent.querySelector('.customer-info h3')?.textContent || 'Customer';
+        const customerEmail = messageContent.querySelector('.customer-email')?.textContent || 'customer@example.com';
+
+        // Populate modal with customer info
+        document.getElementById('replyCustomerName').textContent = customerName;
+        document.getElementById('replyCustomerEmail').textContent = customerEmail;
+        document.getElementById('replyMessage').value = '';
+        document.getElementById('isInternalReply').checked = false;
+
+        // Show modal
+        document.getElementById('replyModal').style.display = 'flex';
+        document.getElementById('replyMessage').focus();
     }
 
     // Close message
     async function closeMessage() {
-        // TODO: Implement close message functionality
-        console.log('Close message');
+        const messageId = getCurrentMessageId();
+        if (!messageId) {
+            console.error('No message selected to close');
+            return;
+        }
+
+        if (confirm('Are you sure you want to close this message?')) {
+            await updateMessageStatus(messageId, 'closed');
+        }
+    }
+
+    // Get current message ID from the detail view
+    function getCurrentMessageId() {
+        const messageDetail = document.getElementById('messageDetail');
+        if (messageDetail && messageDetail.style.display !== 'none') {
+            // Try to get message ID from the current message data
+            const messageContent = document.getElementById('messageContent');
+            if (messageContent && messageContent.dataset.messageId) {
+                return messageContent.dataset.messageId;
+            }
+        }
+        return null;
+    }
+
+    // Hide reply modal
+    function hideReplyModal() {
+        document.getElementById('replyModal').style.display = 'none';
+        document.getElementById('replyMessage').value = '';
+        document.getElementById('isInternalReply').checked = false;
+    }
+
+    // Handle send reply from modal
+    async function handleSendReply() {
+        const messageId = getCurrentMessageId();
+        const replyText = document.getElementById('replyMessage').value.trim();
+        const isInternal = document.getElementById('isInternalReply').checked;
+
+        if (!replyText) {
+            alert('Please enter a reply message');
+            return;
+        }
+
+        // Disable send button to prevent double submission
+        const sendBtn = document.getElementById('sendReply');
+        sendBtn.disabled = true;
+        sendBtn.textContent = 'Sending...';
+
+        try {
+            await sendReply(messageId, replyText, isInternal);
+            hideReplyModal();
+        } catch (error) {
+            console.error('Error sending reply:', error);
+        } finally {
+            sendBtn.disabled = false;
+            sendBtn.textContent = 'Send Reply';
+        }
+    }
+
+    // Send reply to message
+    async function sendReply(messageId, replyText, isInternal = false) {
+        try {
+            const response = await fetch(`/api/chats/offline-messages/${messageId}/reply`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${localStorage.getItem('token')}`
+                },
+                body: JSON.stringify({
+                    reply_message: replyText,
+                    reply_type: 'text',
+                    is_internal: isInternal
+                })
+            });
+
+            const data = await response.json();
+
+            if (data.success) {
+                alert('Reply sent successfully!');
+                // Refresh the message detail view
+                showMessageDetail(messageId);
+                // Refresh the messages list
+                loadMessages();
+            } else {
+                alert('Failed to send reply: ' + (data.error || 'Unknown error'));
+            }
+        } catch (error) {
+            console.error('Error sending reply:', error);
+            alert('Error sending reply: ' + error.message);
+        }
+    }
+
+    // Update message status
+    async function updateMessageStatus(messageId, status) {
+        try {
+            const response = await fetch(`/api/chats/offline-messages/${messageId}/status`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${localStorage.getItem('token')}`
+                },
+                body: JSON.stringify({
+                    status: status,
+                    assigned_agent_id: getCurrentAgentId()
+                })
+            });
+
+            const data = await response.json();
+
+            if (data.success) {
+                alert(`Message ${status} successfully!`);
+                // Refresh the message detail view
+                showMessageDetail(messageId);
+                // Refresh the messages list
+                loadMessages();
+            } else {
+                alert('Failed to update message status: ' + (data.error || 'Unknown error'));
+            }
+        } catch (error) {
+            console.error('Error updating message status:', error);
+            alert('Error updating message status: ' + error.message);
+        }
+    }
+
+    // Get current agent ID
+    function getCurrentAgentId() {
+        // Try to get from window.app.currentUser
+        if (window.app && window.app.currentUser) {
+            return window.app.currentUser.id;
+        }
+        
+        // Fallback - try to get from localStorage
+        const userData = localStorage.getItem('userData');
+        if (userData) {
+            try {
+                const user = JSON.parse(userData);
+                return user.agentId || user.id;
+            } catch (e) {
+                console.error('Error parsing user data:', e);
+            }
+        }
+        
+        // Final fallback
+        console.error('Could not get agent ID');
+        return 1; // Default agent ID
     }
 
     // Update unread count
     async function updateUnreadCount() {
         try {
-            const response = await fetch('/api/chats/offline-messages/unread/count');
+            const response = await fetch('/api/chats/offline-messages/unread/count', {
+                headers: {
+                    'Authorization': `Bearer ${localStorage.getItem('token')}`
+                }
+            });
             const data = await response.json();
             
             if (data.success) {

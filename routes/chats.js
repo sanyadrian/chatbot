@@ -2,7 +2,7 @@ const express = require('express');
 const jwt = require('jsonwebtoken');
 const { query, transaction } = require('../config/database');
 const nodemailer = require('nodemailer');
-const { SESv2Client, SendEmailCommand } = require('@aws-sdk/client-sesv2');
+const { SESClient, SendEmailCommand } = require('@aws-sdk/client-ses');
 const router = express.Router();
 
 // Check if any agents are available
@@ -93,7 +93,7 @@ async function sendOfflineMessageEmail(agentEmail, agentName, messageData) {
   
   try {
     // Create SES v2 client
-    const sesClient = new SESv2Client({
+    const sesClient = new SESClient({
       region: process.env.AWS_REGION || 'us-east-1',
       credentials: {
         accessKeyId: process.env.AWS_ACCESS_KEY_ID,
@@ -101,23 +101,21 @@ async function sendOfflineMessageEmail(agentEmail, agentName, messageData) {
       }
     });
 
-    // Prepare email parameters for SESv2
+    // Prepare email parameters for SES
     const emailParams = {
-      FromEmailAddress: process.env.SES_FROM_EMAIL || 'noreply@central-chat-dashboard.com',
+      Source: process.env.SES_FROM_EMAIL || 'noreply@central-chat-dashboard.com',
       Destination: {
         ToAddresses: [agentEmail]
       },
-      Content: {
-        Simple: {
-          Subject: {
-            Data: subject,
+      Message: {
+        Subject: {
+          Data: subject,
+          Charset: 'UTF-8'
+        },
+        Body: {
+          Html: {
+            Data: emailBody,
             Charset: 'UTF-8'
-          },
-          Body: {
-            Html: {
-              Data: emailBody,
-              Charset: 'UTF-8'
-            }
           }
         }
       },
@@ -240,6 +238,80 @@ const authenticateToken = (req, res, next) => {
     next();
   });
 };
+
+// Function to send customer reply email
+async function sendCustomerReplyEmail(customerEmail, customerName, replyMessage) {
+  const emailBody = `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+      <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
+        <h2 style="color: #333; margin: 0 0 10px 0;">Thank you for contacting us!</h2>
+        <p style="color: #666; margin: 0;">Hi ${customerName},</p>
+      </div>
+      
+      <div style="background: white; padding: 20px; border: 1px solid #e9ecef; border-radius: 8px; margin-bottom: 20px;">
+        <p style="color: #333; line-height: 1.6; margin: 0 0 15px 0;">${replyMessage}</p>
+      </div>
+      
+      <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; text-align: center;">
+        <p style="color: #666; margin: 0; font-size: 14px;">
+          If you have any further questions, please don't hesitate to reach out to us.
+        </p>
+        <p style="color: #666; margin: 10px 0 0 0; font-size: 12px;">
+          Best regards,<br>
+          Customer Support Team
+        </p>
+      </div>
+    </div>
+  `;
+
+  const emailParams = {
+    Source: process.env.FROM_EMAIL || 'noreply@central-chat-dashboard.com',
+    Destination: {
+      ToAddresses: [customerEmail]
+    },
+    Message: {
+      Subject: {
+        Data: 'Re: Your inquiry - Customer Support',
+        Charset: 'UTF-8'
+      },
+      Body: {
+        Html: {
+          Data: emailBody,
+          Charset: 'UTF-8'
+        }
+      }
+    },
+    ReplyToAddresses: [process.env.REPLY_TO_EMAIL || 'support@central-chat-dashboard.com']
+  };
+
+  try {
+    // Create SES client
+    const sesClient = new SESClient({
+      region: process.env.AWS_REGION || 'us-east-1',
+      credentials: {
+        accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+        secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY
+      }
+    });
+
+    const command = new SendEmailCommand(emailParams);
+    const result = await sesClient.send(command);
+    console.log(`✅ Customer reply email sent successfully. MessageId: ${result.MessageId}`);
+    return result;
+  } catch (error) {
+    console.error(`❌ Failed to send customer reply email to ${customerEmail}:`, error);
+    
+    // Fallback: Log email details for manual sending
+    console.log('📧 EMAIL FALLBACK - Manual sending required:');
+    console.log(`To: ${customerEmail}`);
+    console.log(`Subject: Re: Your inquiry - Customer Support`);
+    console.log(`Body: ${emailBody}`);
+    console.log('--- END EMAIL ---');
+    
+    // Don't throw error - just log it
+    return { fallback: true, message: 'Email logged for manual sending' };
+  }
+}
 
 // Start new chat session (called by plugin)
 router.post('/start', async (req, res) => {
@@ -1054,7 +1126,7 @@ router.post('/close', authenticateToken, async (req, res) => {
 // ==================== OFFLINE MESSAGES API ====================
 
 // Get all offline messages with filters
-router.get('/offline-messages', async (req, res) => {
+router.get('/offline-messages', authenticateToken, async (req, res) => {
   try {
     const { status = 'all', priority = 'all', page = 1, limit = 20 } = req.query;
     const offset = (page - 1) * limit;
@@ -1132,7 +1204,7 @@ router.get('/offline-messages', async (req, res) => {
 });
 
 // Get specific offline message with replies
-router.get('/offline-messages/:id', async (req, res) => {
+router.get('/offline-messages/:id', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
 
@@ -1247,11 +1319,11 @@ router.post('/offline-messages', async (req, res) => {
 });
 
 // Reply to offline message
-router.post('/offline-messages/:id/reply', async (req, res) => {
+router.post('/offline-messages/:id/reply', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
     const { reply_message, reply_type = 'text', is_internal = false } = req.body;
-    const agent_id = req.user.agentId;
+    const agent_id = req.agent.agentId;
 
     if (!reply_message) {
       return res.status(400).json({ error: 'Reply message is required' });
@@ -1289,8 +1361,20 @@ router.post('/offline-messages/:id/reply', async (req, res) => {
 
     // If it's not an internal note, send email to customer
     if (!is_internal) {
-      // TODO: Implement email sending to customer
-      console.log(`Would send email to customer with reply: ${reply_message}`);
+      try {
+        // Get customer email from the message
+        const customerQuery = 'SELECT customer_email, customer_name FROM offline_messages WHERE id = $1';
+        const customerResult = await query(customerQuery, [id]);
+        
+        if (customerResult.rows.length > 0) {
+          const { customer_email, customer_name } = customerResult.rows[0];
+          await sendCustomerReplyEmail(customer_email, customer_name, reply_message);
+          console.log(`✅ Reply email sent to customer: ${customer_email}`);
+        }
+      } catch (emailError) {
+        console.error('❌ Failed to send reply email to customer:', emailError);
+        // Don't fail the entire request if email fails
+      }
     }
 
     res.json({
@@ -1305,7 +1389,7 @@ router.post('/offline-messages/:id/reply', async (req, res) => {
 });
 
 // Update message status
-router.put('/offline-messages/:id/status', async (req, res) => {
+router.put('/offline-messages/:id/status', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
     const { status, assigned_agent_id } = req.body;
@@ -1340,7 +1424,7 @@ router.put('/offline-messages/:id/status', async (req, res) => {
 });
 
 // Get unread messages count
-router.get('/offline-messages/unread/count', async (req, res) => {
+router.get('/offline-messages/unread/count', authenticateToken, async (req, res) => {
   try {
     const result = await query(
       'SELECT COUNT(*) as count FROM offline_messages WHERE status = $1',
