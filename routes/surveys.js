@@ -28,6 +28,7 @@ router.post('/submit', async (req, res) => {
       session_id,
       customer_name,
       customer_email,
+      agent_name,
       problem_solved,
       feedback,
       rating
@@ -51,11 +52,25 @@ router.post('/submit', async (req, res) => {
       WHERE cs.session_id = $1
     `, [session_id]);
 
-    if (sessionResult.rows.length === 0) {
-      return res.status(404).json({ error: 'Session not found' });
-    }
+    // If session not found in Central Dashboard, use default values
+    // This handles WordPress-only chat sessions
+    let agent_id = null;
+    let final_agent_name = null;
+    let website_id = null;
+    let website_name = null;
 
-    const session = sessionResult.rows[0];
+    if (sessionResult.rows.length > 0) {
+      const session = sessionResult.rows[0];
+      agent_id = session.agent_id;
+      final_agent_name = session.agent_name;
+      website_id = session.website_id;
+      website_name = session.website_name;
+    }
+    
+    // Use agent_name from request if provided (for WordPress chats)
+    if (agent_name) {
+      final_agent_name = agent_name;
+    }
 
     // Insert survey response
     const result = await query(`
@@ -77,16 +92,15 @@ router.post('/submit', async (req, res) => {
       session_id,
       customer_name || null,
       customer_email || null,
-      session.agent_id,
-      session.agent_name,
-      session.website_id,
-      session.website_name,
+      agent_id,
+      final_agent_name,
+      website_id,
+      website_name,
       problem_solved,
       feedback || null,
       rating || null
     ]);
 
-    console.log('✅ Survey submitted successfully:', result.rows[0]);
 
     res.json({
       success: true,
