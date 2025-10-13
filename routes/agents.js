@@ -309,4 +309,42 @@ router.delete('/:id', async (req, res) => {
   }
 });
 
+// Update agent status only
+router.put('/:id/status', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status } = req.body;
+
+    if (!status || !['online', 'offline'].includes(status)) {
+      return res.status(400).json({ error: 'Invalid status. Must be "online" or "offline"' });
+    }
+
+    // Check if agent exists
+    const existingAgent = await query(
+      'SELECT id, name FROM agents WHERE id = $1',
+      [id]
+    );
+
+    if (existingAgent.rows.length === 0) {
+      return res.status(404).json({ error: 'Agent not found' });
+    }
+
+    // Update only the status
+    const result = await query(
+      'UPDATE agents SET status = $1, updated_at = NOW() WHERE id = $2 RETURNING id, name, status',
+      [status, id]
+    );
+
+    res.json({
+      success: true,
+      message: `Agent ${existingAgent.rows[0].name} status updated to ${status}`,
+      agent: result.rows[0]
+    });
+
+  } catch (error) {
+    console.error('Update agent status error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 module.exports = router;

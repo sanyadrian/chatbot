@@ -11,6 +11,7 @@ const authRoutes = require('./routes/auth');
 const chatRoutes = require('./routes/chats');
 const websiteRoutes = require('./routes/websites');
 const agentRoutes = require('./routes/agents');
+const surveyRoutes = require('./routes/surveys');
 
 const app = express();
 const server = http.createServer(app);
@@ -65,6 +66,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/chats', chatRoutes);
 app.use('/api/websites', websiteRoutes);
 app.use('/api/agents', agentRoutes);
+app.use('/api/surveys', surveyRoutes);
 
 // Socket.io test endpoint (before static files)
 app.get('/socket.io-test', (req, res) => {

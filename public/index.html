@@ -75,6 +75,11 @@
                     <span>Messages</span>
                     <span class="badge" id="unreadMessagesCount">0</span>
                 </a>
+                <a href="#" class="nav-item" data-section="surveys">
+                    <i class="fas fa-poll"></i>
+                    <span>Surveys</span>
+                    <span class="badge" id="newSurveysCount">0</span>
+                </a>
                 <a href="#" class="nav-item" data-section="agents">
                     <i class="fas fa-users"></i>
                     <span>Agents</span>
@@ -297,6 +302,96 @@
                     </div>
                 </div>
 
+                <!-- Surveys Section -->
+                <div id="surveysSection" class="section">
+                    <div class="section-header">
+                        <h2>Customer Surveys</h2>
+                        <div class="section-actions">
+                            <button class="btn btn-secondary" onclick="surveysManager.refreshSurveys()">
+                                <i class="fas fa-sync-alt"></i> Refresh
+                            </button>
+                        </div>
+                    </div>
+                    <div class="surveys-content">
+                        <div class="surveys-stats">
+                            <div class="stat-card">
+                                <div class="stat-icon">
+                                    <i class="fas fa-poll"></i>
+                                </div>
+                                <div class="stat-content">
+                                    <h3 id="totalSurveys">0</h3>
+                                    <p>Total Surveys</p>
+                                </div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-icon">
+                                    <i class="fas fa-thumbs-up"></i>
+                                </div>
+                                <div class="stat-content">
+                                    <h3 id="satisfactionRate">0%</h3>
+                                    <p>Satisfaction Rate</p>
+                                </div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-icon">
+                                    <i class="fas fa-star"></i>
+                                </div>
+                                <div class="stat-content">
+                                    <h3 id="averageRating">0.0</h3>
+                                    <p>Average Rating</p>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="surveys-filters">
+                            <div class="filter-group">
+                                <label for="surveyStatusFilter">Status:</label>
+                                <select id="surveyStatusFilter">
+                                    <option value="">All</option>
+                                    <option value="solved">Problem Solved</option>
+                                    <option value="not_solved">Problem Not Solved</option>
+                                </select>
+                            </div>
+                            <div class="filter-group">
+                                <label for="surveyAgentFilter">Agent:</label>
+                                <select id="surveyAgentFilter">
+                                    <option value="">All Agents</option>
+                                </select>
+                            </div>
+                            <div class="filter-group">
+                                <label for="surveyDateFilter">Date Range:</label>
+                                <input type="date" id="surveyDateFrom" placeholder="From">
+                                <input type="date" id="surveyDateTo" placeholder="To">
+                            </div>
+                        </div>
+                        
+                        <div class="surveys-table-container">
+                            <table class="surveys-table">
+                                <thead>
+                                    <tr>
+                                        <th>Customer</th>
+                                        <th>Agent</th>
+                                        <th>Problem Solved</th>
+                                        <th>Rating</th>
+                                        <th>Feedback</th>
+                                        <th>Date</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="surveysTableBody">
+                                    <tr>
+                                        <td colspan="7" class="no-data">Loading surveys...</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                        
+                        <div class="pagination" id="surveysPagination">
+                            <!-- Pagination will be added here -->
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Settings Section -->
                 <div id="settingsSection" class="section">
                     <div class="section-header">
@@ -365,10 +460,11 @@
     <!-- Scripts -->
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
     <script src="/js/notifications.js?v=1&t=1735312000"></script>
-    <script src="/js/app.js?v=7&t=1735312000"></script>
+    <script src="/js/app.js?v=8&t=1735312000"></script>
     <script src="/js/auth.js?v=4&t=1735312000"></script>
-    <script src="/js/chat.js?v=6&t=1735312000"></script>
+    <script src="/js/chat.js?v=8&t=1735313000"></script>
     <script src="/js/websites.js?v=6&t=1735312000"></script>
     <script src="/js/agents.js?v=5&t=1735312000"></script>
+    <script src="/js/surveys.js?v=1&t=1735312000"></script>
 </body>
 </html>

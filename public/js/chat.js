@@ -460,19 +460,31 @@ class ChatManager {
     }
 
     async closeCurrentChat() {
+        console.log('🚀 CLOSE CURRENT CHAT - UPDATED VERSION LOADED!');
+        console.log('🚀 CLOSE CURRENT CHAT - Button clicked!');
         if (!this.currentChat) return;
 
         if (!confirm('Are you sure you want to close this chat?')) return;
 
         try {
-            const response = await fetch(`${this.apiBase}/api/chats/close`, {
-                method: 'POST',
+            console.log('🔄 CHAT.JS: Attempting to close chat with ID:', this.currentChat);
+            console.log('🔄 CHAT.JS: API Base URL:', this.apiBase);
+            console.log('🔄 CHAT.JS: Full URL:', `${this.apiBase}/api/chats/close-session`);
+            
+            const url = `${this.apiBase}/api/chats/delete`;
+            console.log('🔄 CHAT.JS: About to call URL:', url);
+            
+            const response = await fetch(url, {
+                method: 'DELETE',
                 headers: {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${localStorage.getItem('token')}`
                 },
-                body: JSON.stringify({ session_id: this.currentChat.id })
+                body: JSON.stringify({ session_id: this.currentChat.session_id, action: 'close' })
             });
+
+            console.log('🔄 CHAT.JS: Response status:', response.status);
+            console.log('🔄 CHAT.JS: Response ok:', response.ok);
 
             if (response.ok) {
                 this.hideChatInterface();

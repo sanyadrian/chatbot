@@ -183,8 +183,13 @@ async function sendMessageToWordPress(domain, sessionId, message, senderType) {
 // Function to send assignment notification to WordPress plugin
 async function sendAssignmentNotificationToWordPress(domain, sessionId, message) {
   try {
-    // Clean the domain - remove trailing slash and ensure it has protocol
-    let cleanDomain = domain.trim();
+    console.log('🔍 sendAssignmentNotificationToWordPress called with:');
+    console.log('🔍 domain:', domain, 'type:', typeof domain);
+    console.log('🔍 sessionId:', sessionId);
+    console.log('🔍 message:', message);
+    
+    // Ensure domain is a string and clean it - remove trailing slash and ensure it has protocol
+    let cleanDomain = String(domain || '').trim();
     if (cleanDomain.endsWith('/')) {
       cleanDomain = cleanDomain.slice(0, -1);
     }
@@ -1018,9 +1023,12 @@ router.delete('/delete', authenticateToken, async (req, res) => {
     console.log('Request method:', req.method);
     console.log('Request URL:', req.url);
     
-    const { session_id } = req.body;
-    console.log('Extracted session_id:', session_id);
-    console.log('Session ID type:', typeof session_id);
+    const { session_id, action = 'delete' } = req.body;
+    console.log('🔍 DELETE ENDPOINT: Extracted session_id:', session_id);
+    console.log('🔍 DELETE ENDPOINT: Action:', action);
+    console.log('🔍 DELETE ENDPOINT: Action type:', typeof action);
+    console.log('🔍 DELETE ENDPOINT: Session ID type:', typeof session_id);
+    console.log('🔍 DELETE ENDPOINT: Full request body:', req.body);
 
     if (!session_id) {
       console.log('ERROR: No session_id provided');
@@ -1074,23 +1082,66 @@ router.delete('/delete', authenticateToken, async (req, res) => {
       console.error('Failed to send chat closure notification to WordPress:', error);
     }
     
-    await transaction(async (client) => {
-      // Delete messages first
-      console.log('Deleting messages...');
-      const messagesResult = await client.query('DELETE FROM messages WHERE session_id = $1', [session_id]);
-      console.log('Messages deleted:', messagesResult.rowCount);
+    console.log('🔍 ACTION CHECK: action =', action, 'type =', typeof action, 'action === "close" =', action === 'close');
+    
+    if (action === 'close') {
+      console.log('🔍 CLOSE ACTION: Closing session without deleting...');
       
-      // Delete session
-      console.log('Deleting session...');
-      const sessionResult = await client.query('DELETE FROM chat_sessions WHERE session_id = $1', [session_id]);
-      console.log('Session deleted:', sessionResult.rowCount);
-    });
+      // Close session (update status, don't delete)
+      console.log('Closing session...');
+      await query(
+        'UPDATE chat_sessions SET status = $1, ended_at = NOW(), last_activity = NOW() WHERE session_id = $2',
+        ['closed', session_id]
+      );
+      
+      // Send notification to WordPress for close action
+      try {
+        // Get website info for this session
+        const websiteResult = await query(
+          'SELECT w.domain FROM chat_sessions cs JOIN websites w ON cs.website_id = w.id WHERE cs.session_id = $1',
+          [session_id]
+        );
+        
+        console.log('Website query result for close session', session_id, ':', websiteResult.rows);
+        
+        if (websiteResult.rows.length > 0) {
+          const website = websiteResult.rows[0];
+          console.log('Sending chat closure notification to website:', website.domain);
+          
+          const result = await sendAssignmentNotificationToWordPress(website.domain, session_id, 'Chat session closed by agent');
+          console.log('Chat closure notification result:', result);
+        } else {
+          console.log('No website found for session:', session_id);
+        }
+      } catch (error) {
+        console.error('Failed to send chat closure notification to WordPress:', error);
+      }
+      
+      console.log('Session closed successfully');
+      res.json({
+        success: true,
+        message: 'Chat session closed successfully'
+      });
+    } else {
+      // Delete session (original behavior)
+      await transaction(async (client) => {
+        // Delete messages first
+        console.log('Deleting messages...');
+        const messagesResult = await client.query('DELETE FROM messages WHERE session_id = $1', [session_id]);
+        console.log('Messages deleted:', messagesResult.rowCount);
+        
+        // Delete session
+        console.log('Deleting session...');
+        const sessionResult = await client.query('DELETE FROM chat_sessions WHERE session_id = $1', [session_id]);
+        console.log('Session deleted:', sessionResult.rowCount);
+      });
 
-    console.log('Deletion completed successfully');
-    res.json({
-      success: true,
-      message: 'Chat session deleted successfully'
-    });
+      console.log('Deletion completed successfully');
+      res.json({
+        success: true,
+        message: 'Chat session deleted successfully'
+      });
+    }
 
   } catch (error) {
     console.error('Delete session error:', error);
@@ -1098,19 +1149,54 @@ router.delete('/delete', authenticateToken, async (req, res) => {
   }
 });
 
-// Close chat session (alternative endpoint)
-router.post('/close', authenticateToken, async (req, res) => {
+// Test route
+router.get('/test-close-session', (req, res) => {
+  console.log('🔍 TEST ROUTE: /test-close-session hit!');
+  res.json({ message: 'Test route working' });
+});
+
+// Close chat session (simple endpoint)
+router.post('/close-session', authenticateToken, async (req, res) => {
   try {
+    console.log('🔍 CLOSE-SESSION: Route hit!');
+    console.log('🔍 CLOSE-SESSION: Request body:', req.body);
     const { session_id } = req.body;
 
     if (!session_id) {
       return res.status(400).json({ error: 'Session ID is required' });
     }
 
+    // Get session details for WordPress notification
+    const sessionResult = await query(
+      'SELECT website_id FROM chat_sessions WHERE session_id = $1',
+      [session_id]
+    );
+
+    if (sessionResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Session not found' });
+    }
+
+    const websiteId = sessionResult.rows[0].website_id;
+
+    // Update session status (just close, don't delete)
     await query(
       'UPDATE chat_sessions SET status = $1, ended_at = NOW(), last_activity = NOW() WHERE session_id = $2',
       ['closed', session_id]
     );
+
+    // Send notification to WordPress
+    try {
+      await sendAssignmentNotificationToWordPress(websiteId, {
+        session_id: session_id,
+        message: 'Live chat session ended. How else can I help you today?',
+        sender_type: 'system',
+        action: 'chat_closed'
+      });
+      console.log('✅ WordPress notification sent for chat closure');
+    } catch (wpError) {
+      console.error('❌ Failed to notify WordPress of chat closure:', wpError);
+      // Don't fail the request if WordPress notification fails
+    }
 
     res.json({
       success: true,

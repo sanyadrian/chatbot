@@ -115,9 +115,10 @@ class AgentsManager {
 
     createModal(title, content) {
         const modal = document.createElement('div');
-        modal.className = 'modal-overlay';
+        modal.className = 'modal';
+        modal.style.display = 'flex';
         modal.innerHTML = `
-            <div class="modal">
+            <div class="modal-content">
                 <div class="modal-header">
                     <h3>${title}</h3>
                     <button class="modal-close">&times;</button>
@@ -273,13 +274,20 @@ class AgentsManager {
     }
 
     async toggleAgentStatus(id) {
+        console.log('🔄 toggleAgentStatus called with ID:', id);
         const agent = this.agents.find(a => a.id === id);
-        if (!agent) return;
+        console.log('🔍 Found agent:', agent);
+        if (!agent) {
+            console.error('❌ Agent not found with ID:', id);
+            return;
+        }
 
         const newStatus = agent.status === 'online' ? 'offline' : 'online';
+        console.log('🔄 Changing status from', agent.status, 'to', newStatus);
 
         try {
-            const response = await fetch(`${this.apiBase}/api/agents/${id}/status`, {
+            // Try the specific status endpoint first
+            let response = await fetch(`${this.apiBase}/api/agents/${id}/status`, {
                 method: 'PUT',
                 headers: {
                     'Content-Type': 'application/json',
@@ -288,15 +296,32 @@ class AgentsManager {
                 body: JSON.stringify({ status: newStatus })
             });
 
+            // If status endpoint doesn't exist, try the general agents endpoint
+            if (!response.ok && response.status === 404) {
+                console.log('🔄 Status endpoint not found, trying general agents endpoint...');
+                response = await fetch(`${this.apiBase}/api/agents/${id}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${localStorage.getItem('token')}`
+                    },
+                    body: JSON.stringify({ status: newStatus })
+                });
+            }
+
             if (response.ok) {
-                this.loadAgents();
-                this.showSuccess(`Agent ${newStatus === 'online' ? 'activated' : 'deactivated'} successfully`);
+                // Update local agent status immediately
+                agent.status = newStatus;
+                this.renderAgents();
+                this.showSuccess(`Agent ${agent.name} is now ${newStatus}`);
+                console.log('✅ Agent status updated successfully');
             } else {
                 const errorData = await response.json();
+                console.error('❌ API Error:', errorData);
                 this.showError(errorData.error || 'Failed to update agent status');
             }
         } catch (error) {
-            console.error('Agent status update error:', error);
+            console.error('❌ Agent status update error:', error);
             this.showError('Network error. Please try again.');
         }
     }
@@ -362,36 +387,6 @@ class AgentsManager {
         }
     }
 
-    async toggleAgentStatus(id) {
-        const agent = this.agents.find(a => a.id === id);
-        if (!agent) return;
-
-        const newStatus = agent.status === 'online' ? 'offline' : 'online';
-
-        try {
-            const response = await fetch(`${this.apiBase}/api/agents/${id}`, {
-                method: 'PUT',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${localStorage.getItem('token')}`
-                },
-                body: JSON.stringify({ status: newStatus })
-            });
-
-            if (response.ok) {
-                // Update local agent status
-                agent.status = newStatus;
-                this.renderAgents();
-                this.showSuccess(`Agent ${agent.name} is now ${newStatus}`);
-            } else {
-                const errorData = await response.json();
-                this.showError(errorData.error || 'Failed to update agent status');
-            }
-        } catch (error) {
-            console.error('Agent status toggle error:', error);
-            this.showError('Network error. Please try again.');
-        }
-    }
 
     escapeHtml(text) {
         if (!text) return '';

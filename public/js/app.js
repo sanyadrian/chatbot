@@ -563,7 +563,12 @@ class ChatDashboard {
         if (!confirm('Are you sure you want to close this chat?')) return;
 
         try {
-            const response = await fetch(`${this.apiBase}/api/chats/close`, {
+            // Use the same delete endpoint but just update status instead of deleting
+            console.log('🔄 Attempting to close chat with ID:', chatId);
+            console.log('🔄 API Base URL:', this.apiBase);
+            console.log('🔄 Full URL:', `${this.apiBase}/api/chats/close-session`);
+            
+            const response = await fetch(`${this.apiBase}/api/chats/close-session`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -572,12 +577,25 @@ class ChatDashboard {
                 body: JSON.stringify({ session_id: chatId })
             });
 
+            console.log('🔄 Response status:', response.status);
+            console.log('🔄 Response ok:', response.ok);
+
             if (response.ok) {
                 this.loadChats();
                 this.hideChatInterface();
+                this.showSuccess('Chat closed successfully');
+            } else if (response.status === 401) {
+                // Token expired, redirect to login
+                localStorage.removeItem('token');
+                window.location.href = '/login.html';
+            } else {
+                const errorData = await response.json();
+                console.log('🔄 Error data:', errorData);
+                this.showError(errorData.error || 'Failed to close chat');
             }
         } catch (error) {
             console.error('Failed to close chat:', error);
+            this.showError('Network error. Please try again.');
         }
     }
 

@@ -39,3 +39,5 @@ test-local.sh
 test-local.bat
 deploy-frontend.sh
 deploy-backend.sh
+create_surveys_table.js
+create_surveys_table.sql

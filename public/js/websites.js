@@ -103,9 +103,10 @@ class WebsitesManager {
 
     createModal(title, content) {
         const modal = document.createElement('div');
-        modal.className = 'modal-overlay';
+        modal.className = 'modal';
+        modal.style.display = 'flex';
         modal.innerHTML = `
-            <div class="modal">
+            <div class="modal-content">
                 <div class="modal-header">
                     <h3>${title}</h3>
                     <button class="modal-close">&times;</button>
@@ -325,37 +326,28 @@ class WebsitesManager {
         const website = this.websites.find(w => w.id === id);
         if (!website) return;
 
-        const modal = document.createElement('div');
-        modal.className = 'modal-overlay';
-        modal.innerHTML = `
-            <div class="modal">
-                <div class="modal-header">
-                    <h3>API Key</h3>
-                    <button class="modal-close">&times;</button>
+        const content = `
+            <div class="api-key-display">
+                <p>Use this API key to integrate your website with the chat system:</p>
+                <div class="api-key-container">
+                    <input type="text" value="${website.api_key}" readonly class="api-key-input">
+                    <button class="btn btn-secondary" onclick="websitesManager.copyApiKey('${website.api_key}')">
+                        <i class="fas fa-copy"></i>
+                        Copy
+                    </button>
                 </div>
-                <div class="modal-body">
-                    <div class="api-key-display">
-                        <p>Use this API key to integrate your website with the chat system:</p>
-                        <div class="api-key-container">
-                            <input type="text" value="${website.api_key}" readonly class="api-key-input">
-                            <button class="btn btn-secondary" onclick="websitesManager.copyApiKey('${website.api_key}')">
-                                <i class="fas fa-copy"></i>
-                                Copy
-                            </button>
-                        </div>
-                        <div class="api-key-info">
-                            <h4>Integration Instructions:</h4>
-                            <ol>
-                                <li>Add this API key to your WordPress plugin settings</li>
-                                <li>Configure the chat endpoint: <code>${this.apiBase}/api/chats/start</code></li>
-                                <li>Test the integration by starting a chat from your website</li>
-                            </ol>
-                        </div>
-                    </div>
+                <div class="api-key-info">
+                    <h4>Integration Instructions:</h4>
+                    <ol>
+                        <li>Add this API key to your WordPress plugin settings</li>
+                        <li>Configure the chat endpoint: <code>${this.apiBase}/api/chats/start</code></li>
+                        <li>Test the integration by starting a chat from your website</li>
+                    </ol>
                 </div>
             </div>
         `;
 
+        const modal = this.createModal('API Key', content);
         document.body.appendChild(modal);
         this.setupModalEvents(modal);
     }
