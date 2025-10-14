@@ -229,6 +229,40 @@ router.post('/:id/change-password', async (req, res) => {
   }
 });
 
+// Reset agent password (PUT endpoint for frontend compatibility)
+router.put('/:id/password', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { password } = req.body;
+
+    if (!password) {
+      return res.status(400).json({ error: 'Password is required' });
+    }
+
+    // Hash new password
+    const saltRounds = 10;
+    const passwordHash = await bcrypt.hash(password, saltRounds);
+
+    const result = await query(
+      'UPDATE agents SET password_hash = $1, updated_at = NOW() WHERE id = $2 RETURNING id, name, email',
+      [passwordHash, id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Agent not found' });
+    }
+
+    res.json({
+      success: true,
+      message: 'Password reset successfully'
+    });
+
+  } catch (error) {
+    console.error('Reset password error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // Get agent statistics
 router.get('/:id/stats', async (req, res) => {
   try {
