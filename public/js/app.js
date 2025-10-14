@@ -61,7 +61,11 @@ class ChatDashboard {
         const logoutBtn = document.getElementById('logoutBtn');
         if (logoutBtn) {
             logoutBtn.addEventListener('click', () => {
-                this.logout();
+                if (window.authManager) {
+                    window.authManager.logout();
+                } else {
+                    this.logout();
+                }
             });
         }
 

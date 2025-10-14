@@ -36,12 +36,7 @@ class ChatManager {
             });
         }
 
-        const closeBtn = document.getElementById('closeChatBtn');
-        if (closeBtn) {
-            closeBtn.addEventListener('click', () => {
-                this.closeCurrentChat();
-            });
-        }
+        // Close button is handled by app.js to avoid conflicts
 
         const deleteBtn = document.getElementById('deleteChatBtn');
         if (deleteBtn) {

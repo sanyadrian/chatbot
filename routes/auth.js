@@ -76,7 +76,15 @@ router.post('/logout', async (req, res) => {
       return res.status(401).json({ error: 'No token provided' });
     }
 
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    let decoded;
+    try {
+      decoded = jwt.verify(token, process.env.JWT_SECRET);
+    } catch (jwtError) {
+      console.error('JWT verification failed:', jwtError.message);
+      // If JWT is invalid, we can't identify the agent, so just return success
+      // The frontend will clear the token anyway
+      return res.json({ success: true, message: 'Logged out successfully' });
+    }
     
     // Update agent status to offline
     await query(
