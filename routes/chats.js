@@ -1209,6 +1209,61 @@ router.post('/close-session', authenticateToken, async (req, res) => {
   }
 });
 
+// Public close session endpoint (API key auth for WordPress plugin)
+router.post('/public/close-session', async (req, res) => {
+  try {
+    const { session_id, api_key } = req.body;
+
+    if (!session_id || !api_key) {
+      return res.status(400).json({ error: 'Session ID and API key are required' });
+    }
+
+    // Validate session and get website
+    const sessionResult = await query(
+      `SELECT cs.session_id, cs.status, cs.website_id, w.api_key, w.domain
+       FROM chat_sessions cs
+       JOIN websites w ON cs.website_id = w.id
+       WHERE cs.session_id = $1`,
+      [session_id]
+    );
+
+    if (sessionResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Session not found' });
+    }
+
+    const session = sessionResult.rows[0];
+
+    // Check API key matches the website of this session
+    if (!session.api_key || session.api_key !== api_key) {
+      return res.status(403).json({ error: 'Invalid API key' });
+    }
+
+    // Update session status to closed
+    await query(
+      'UPDATE chat_sessions SET status = $1, ended_at = NOW(), last_activity = NOW() WHERE session_id = $2',
+      ['closed', session_id]
+    );
+
+    // Add system message to the session
+    await query(
+      'INSERT INTO messages (session_id, sender_type, content) VALUES ($1, $2, $3)',
+      [session_id, 'system', 'Chat session closed by user']
+    );
+
+    // Emit socket event for real-time UI updates (if available)
+    if (req.app && req.app.get('io')) {
+      const io = req.app.get('io');
+      io.emit('session-closed', { session_id });
+    }
+
+    res.json({ success: true, message: 'Session closed successfully' });
+
+  } catch (error) {
+    console.error('Public close session error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // ==================== OFFLINE MESSAGES API ====================
 
 // Get all offline messages with filters
