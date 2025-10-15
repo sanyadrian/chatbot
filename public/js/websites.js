@@ -61,6 +61,7 @@ class WebsitesManager {
                     <div class="website-status ${website.status}">${website.status}</div>
                 </div>
                 <div class="website-domain">${this.escapeHtml(website.domain)}</div>
+                <div class="website-id" style="color: var(--text-muted); font-size: 0.85rem; margin-top: 4px;">Website ID: <code>${website.id}</code></div>
                 <div class="website-stats">
                     <div class="stat">
                         <div class="stat-value">${website.total_sessions || 0}</div>
@@ -146,6 +147,10 @@ class WebsitesManager {
         return `
             <form id="websiteForm">
                 <input type="hidden" id="websiteId" value="${website.id}">
+                <div class="form-group">
+                    <label>Website ID</label>
+                    <input type="text" value="${website.id}" readonly style="background: #f6f6f7; color: var(--text-muted);">
+                </div>
                 <div class="form-group">
                     <label for="websiteName">Website Name</label>
                     <input type="text" id="websiteName" name="name" value="${this.escapeHtml(website.name)}" required>
