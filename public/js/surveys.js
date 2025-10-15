@@ -5,7 +5,7 @@ class SurveysManager {
         this.currentPage = 1;
         this.totalPages = 1;
         this.filters = {
-            status: '',
+            problem_solved: undefined,
             agent_id: '',
             date_from: '',
             date_to: ''
@@ -16,6 +16,7 @@ class SurveysManager {
     
     init() {
         this.setupEventListeners();
+        this.populateAgentFilter();
         this.loadSurveys();
         this.loadStats();
     }
@@ -23,27 +24,38 @@ class SurveysManager {
     setupEventListeners() {
         // Filter change events
         document.getElementById('surveyStatusFilter')?.addEventListener('change', (e) => {
-            this.filters.status = e.target.value;
+            const val = e.target.value;
+            if (!val || val === 'all') {
+                this.filters.problem_solved = undefined;
+            } else if (val === 'solved') {
+                this.filters.problem_solved = 'true';
+            } else if (val === 'not_solved') {
+                this.filters.problem_solved = 'false';
+            }
             this.currentPage = 1;
             this.loadSurveys();
+            this.loadStats();
         });
         
         document.getElementById('surveyAgentFilter')?.addEventListener('change', (e) => {
             this.filters.agent_id = e.target.value;
             this.currentPage = 1;
             this.loadSurveys();
+            this.loadStats();
         });
         
         document.getElementById('surveyDateFrom')?.addEventListener('change', (e) => {
             this.filters.date_from = e.target.value;
             this.currentPage = 1;
             this.loadSurveys();
+            this.loadStats();
         });
         
         document.getElementById('surveyDateTo')?.addEventListener('change', (e) => {
             this.filters.date_to = e.target.value;
             this.currentPage = 1;
             this.loadSurveys();
+            this.loadStats();
         });
     }
     
@@ -52,8 +64,13 @@ class SurveysManager {
             const params = new URLSearchParams({
                 page: this.currentPage,
                 limit: 20,
-                ...this.filters
+                agent_id: this.filters.agent_id || '',
+                date_from: this.filters.date_from || '',
+                date_to: this.filters.date_to || ''
             });
+            if (this.filters.problem_solved !== undefined) {
+                params.set('problem_solved', this.filters.problem_solved);
+            }
             
             const response = await fetch(`${this.apiBase}/api/surveys/list?${params}`, {
                 headers: {
@@ -274,9 +291,77 @@ class SurveysManager {
     }
     
     async refreshSurveys() {
-        await this.loadSurveys();
-        await this.loadStats();
-        this.showSuccess('Surveys refreshed');
+        if (!confirm('This will clear all surveys and reset stats. Continue?')) return;
+
+        try {
+            // Clear all surveys
+            const resp = await fetch(`${this.apiBase}/api/surveys/clear`, {
+                method: 'DELETE',
+                headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+            });
+            if (!resp.ok) {
+                const err = await resp.json().catch(() => ({}));
+                throw new Error(err.error || 'Failed to clear surveys');
+            }
+
+            // Reset UI controls
+            const statusEl = document.getElementById('surveyStatusFilter');
+            const agentEl = document.getElementById('surveyAgentFilter');
+            const fromEl = document.getElementById('surveyDateFrom');
+            const toEl = document.getElementById('surveyDateTo');
+
+            if (statusEl) statusEl.value = 'all';
+            if (agentEl) agentEl.value = '';
+            if (fromEl) fromEl.value = '';
+            if (toEl) toEl.value = '';
+
+            // Reset internal filters
+            this.filters = {
+                problem_solved: undefined,
+                agent_id: '',
+                date_from: '',
+                date_to: ''
+            };
+            this.currentPage = 1;
+
+            await this.populateAgentFilter();
+            await this.loadSurveys();
+            await this.loadStats();
+            // Manually render zero stats if needed
+            this.renderStats({ total_surveys: 0, satisfaction_rate: 0, average_rating: 0 });
+            this.showSuccess('All surveys cleared');
+        } catch (e) {
+            this.showError(e.message || 'Failed to refresh');
+        }
+    }
+
+    async populateAgentFilter() {
+        const agentSelect = document.getElementById('surveyAgentFilter');
+        if (!agentSelect) return;
+        try {
+            const response = await fetch(`${this.apiBase}/api/agents/list`, {
+                headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+            });
+            if (!response.ok) throw new Error('Failed to load agents');
+            const data = await response.json();
+            const agents = (data && data.agents) || [];
+            // Preserve current selection if possible
+            const current = agentSelect.value;
+            agentSelect.innerHTML = '<option value="">All Agents</option>' +
+                agents.map(a => `<option value="${a.id}">${this.escapeHtml(a.name)} (${this.escapeHtml(a.email)})</option>`).join('');
+            if (current && [...agentSelect.options].some(o => o.value === current)) {
+                agentSelect.value = current;
+            }
+        } catch (e) {
+            console.error('Failed to populate agents for filter:', e);
+        }
+    }
+
+    escapeHtml(text) {
+        if (!text) return '';
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
     }
     
     truncateText(text, maxLength) {

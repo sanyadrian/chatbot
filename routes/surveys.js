@@ -289,4 +289,16 @@ router.get('/:id', authenticateToken, async (req, res) => {
   }
 });
 
+// Danger: Clear all surveys (admin action)
+router.delete('/clear', authenticateToken, async (req, res) => {
+  try {
+    // Optional: require admin role via req.user if roles exist
+    await query('DELETE FROM chat_surveys');
+    return res.json({ success: true, message: 'All surveys cleared' });
+  } catch (error) {
+    console.error('Error clearing surveys:', error);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 module.exports = router;
